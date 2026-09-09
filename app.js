@@ -7,7 +7,7 @@ const MEALS=[['breakfast','Frühstück','☀️'],['lunch','Mittagessen','🍽�
 const UNITS=['g','kg','ml','l','Stück'];
 const UNIT_GROUP={g:'mass',kg:'mass',ml:'volume',l:'volume','Stück':'count'};
 const UNIT_FACTOR={g:1,kg:1000,ml:1,l:1000,'Stück':1};
-const CHEF_PROXY='https://mealmate-chefkoch.grxq8hqb8r.workers.dev';
+const CHEF_PROXY='https://mealmate.grxq8hqb8r.workers.dev';
 
 const seed={
  recipes:[
