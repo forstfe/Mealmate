@@ -1,21 +1,22 @@
-# MealMate PWA – Version 2
+# MealMate PWA – Version 3
 
 Private iPhone-PWA ohne Konto und ohne Paywall.
 
-Neu in v2:
-- Rezeptbilder in Karten, Detailansicht und Wochenplan
-- Bilder per URL oder direkt aus der iPhone-Fotomediathek
-- Bereich „Entdecken“ mit Chefkoch-Suche
-- Best-effort Import von Rezept-Links über strukturierte Recipe/JSON-LD-Daten
-- Bewertung mit 1–5 Sternen und „Heute gekocht“
-- Lokale Lernlogik: Favoriten, Bewertungen, Kochhistorie, Vorräte und Zeit fließen in Empfehlungen ein
-- Automatischer 7-Tage-Wochenplan mit Abwechslung
-- Service-Worker-Cache v2
+Neu in v3:
+- Wochenplan für Frühstück, Mittagessen und Abendessen an allen 7 Tagen
+- Automatischer Vorschlag für alle 21 Mahlzeiten
+- Einkaufsliste mit Menge und Einheiten g, kg, ml, l und Stück
+- Vorratsliste mit denselben Mengen und Einheiten
+- Automatischer Abgleich Einkauf ↔ Vorrat
+- Beispiel: 500 ml Milch benötigt, 250 ml vorhanden → nur 250 ml landen als Kaufmenge auf der Einkaufsliste
+- Automatische Umrechnung g ↔ kg und ml ↔ l
+- Vollständig durch Vorrat gedeckte Artikel werden separat als „durch Vorrat abgedeckt“ angezeigt
+- Abgehakte Einkäufe können direkt in den Vorrat übernommen werden
+- Alte v2-Daten werden automatisch migriert; alte Tagesplanung wird als Mittagessen übernommen
+- Rezeptdetails zeigen pro Zutat, wie viel vorhanden bzw. noch fehlend ist
+- Service-Worker-Cache v3
 
 ## GitHub Pages aktualisieren
-Ersetze im Repository die Dateien `index.html`, `app.js`, `styles.css`, `sw.js`, `manifest.webmanifest` sowie den `icons`-Ordner durch die Dateien aus diesem Paket. Die ZIP selbst muss nicht ins Repository.
+Ersetze im Repository die bisherigen Dateien durch den Inhalt dieses Ordners. Die ZIP selbst muss nicht ins Repository.
 
-Nach dem Upload kann Safari noch die alte PWA aus dem Cache zeigen. Öffne die GitHub-Pages-Seite einmal in Safari und lade sie neu. Falls nötig, die App vom Home-Bildschirm entfernen und erneut über „Teilen → Zum Home-Bildschirm“ hinzufügen.
-
-## Chefkoch
-Die App nutzt keine offizielle Chefkoch-API. Die Suche öffnet die Chefkoch-Websuche. Beim Link-Import versucht MealMate strukturierte Rezeptdaten auszulesen; Browser-/CORS-Regeln können das blockieren. Dann steht der manuelle Text-/Bildimport als Fallback bereit.
+Nach dem Upload die GitHub-Pages-Seite in Safari einmal neu laden. Falls die alte PWA hartnäckig gecacht bleibt, die App vom Home-Bildschirm entfernen, die Seite in Safari neu laden und erneut über „Teilen → Zum Home-Bildschirm“ hinzufügen.
