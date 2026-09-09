@@ -20,7 +20,7 @@ button{border:0}
 .list{display:flex;flex-direction:column;gap:10px}.row{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px;display:flex;align-items:center;gap:12px}.row-main{flex:1;min-width:0}.row-title{font-weight:750}.row-sub{font-size:12px;color:var(--muted);margin-top:3px}.check{width:24px;height:24px;border-radius:8px;border:1.5px solid #cfd2cb;background:#fff;display:grid;place-items:center}.check.done{background:var(--green);color:#fff;border-color:var(--green)}
 .primary{background:var(--green);color:#fff;border-radius:15px;padding:13px 16px;font-weight:800}.secondary{background:var(--green2);color:var(--green);border-radius:15px;padding:13px 16px;font-weight:800}.danger{background:#f7e7e6;color:var(--danger)}
 .fab{position:fixed;right:18px;bottom:calc(92px + env(safe-area-inset-bottom));width:56px;height:56px;border-radius:50%;background:var(--green);color:#fff;font-size:30px;box-shadow:0 14px 30px rgba(49,91,67,.32);z-index:15}
-.nav{position:fixed;z-index:20;left:50%;transform:translateX(-50%);bottom:0;width:min(760px,100%);padding:8px 10px calc(8px + env(safe-area-inset-bottom));background:rgba(255,255,255,.94);border-top:1px solid var(--line);backdrop-filter:blur(18px);display:grid;grid-template-columns:repeat(5,1fr)}.nav button{background:none;color:#8b918a;padding:7px 2px;font-size:10px;font-weight:700}.nav .ico{font-size:21px;display:block;margin-bottom:3px}.nav button.active{color:var(--green)}
+.nav{position:fixed;z-index:20;left:50%;transform:translateX(-50%);bottom:0;width:min(760px,100%);padding:8px 10px calc(8px + env(safe-area-inset-bottom));background:rgba(255,255,255,.94);border-top:1px solid var(--line);backdrop-filter:blur(18px);display:grid;grid-template-columns:repeat(4,1fr)}.nav button{background:none;color:#8b918a;padding:7px 2px;font-size:10px;font-weight:700}.nav .ico{font-size:21px;display:block;margin-bottom:3px}.nav button.active{color:var(--green)}
 .modal-back{position:fixed;inset:0;background:rgba(19,25,20,.32);z-index:40;display:flex;align-items:flex-end}.modal{width:min(760px,100%);margin:auto;background:var(--bg);border-radius:28px 28px 0 0;max-height:91dvh;overflow:auto;padding:18px 18px calc(24px + env(safe-area-inset-bottom))}.modal-head{display:flex;justify-content:space-between;align-items:center;position:sticky;top:-18px;background:var(--bg);padding:14px 0 10px;z-index:1}.modal h2{margin:0}.close{background:#ebeae5;border-radius:50%;width:38px;height:38px;font-size:19px}
 .field{margin:12px 0}.field label{display:block;font-size:12px;font-weight:800;margin:0 0 6px;color:#5f665f}.field input,.field textarea,.field select{width:100%;border:1px solid var(--line);background:#fff;border-radius:14px;padding:13px;outline:none}.field textarea{min-height:100px;resize:vertical}.actions{display:flex;gap:10px;flex-wrap:wrap}.actions>*{flex:1}
 .detail-cover{height:180px;border-radius:24px;background:linear-gradient(135deg,#dfece3,#f3dfc3);display:grid;place-items:center;font-size:64px}.ingredients{padding:0;margin:8px 0 0;list-style:none}.ingredients li{padding:10px 0;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:12px}.steps{padding-left:20px}.steps li{margin:12px 0;line-height:1.45}.empty{text-align:center;color:var(--muted);padding:35px 14px}.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.kpi{background:#fff;border:1px solid var(--line);padding:12px;border-radius:16px;text-align:center}.kpi b{display:block;font-size:16px}.kpi span{font-size:11px;color:var(--muted)}
@@ -28,7 +28,7 @@ button{border:0}
 .notice{background:#fff7e9;border:1px solid #efd9b8;color:#6c542e;padding:12px 14px;border-radius:16px;font-size:12px;line-height:1.4;margin:12px 0}
 @media(min-width:620px){.grid{grid-template-columns:repeat(3,1fr)}.recipe-cover{height:135px}}
 /* v2: Bilder, Entdecken & lernende Vorschläge */
-.nav{grid-template-columns:repeat(6,1fr)}
+.nav{grid-template-columns:repeat(4,1fr)}
 .recipe-cover{position:relative;background-size:cover;background-position:center;align-items:flex-end}.recipe-cover.has-image:after,.detail-cover.has-image:after{content:"";position:absolute;inset:0;background:linear-gradient(transparent 45%,rgba(0,0,0,.28));pointer-events:none}.recipe-cover.has-image span{position:relative;z-index:1;text-shadow:0 2px 8px rgba(0,0,0,.35)}
 .detail-cover{position:relative;background-size:cover;background-position:center}.detail-cover.has-image span{display:none}
 .learn-card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px 15px;display:flex;flex-direction:column;gap:4px;margin:12px 0}.learn-card b{font-size:14px}.learn-card span{font-size:12px;line-height:1.4;color:var(--muted)}
@@ -62,3 +62,22 @@ button{border:0}
 .chef-browser-modal .modal-head h2{font-size:18px}
 .chef-browser-frame{display:block;width:100%;height:100%;flex:1 1 auto;border:0;background:#fff}
 .source-button{border:0;background:transparent;padding:0;font:inherit;cursor:pointer}
+
+/* v10: personal recommendation refresh + swipe-to-delete in weekly plan */
+.recommend-head{align-items:flex-start;gap:10px}
+.recommend-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.recommend-actions button{white-space:nowrap}
+.recommend-hint{font-size:.82rem;color:var(--muted,#7c837d);margin:-2px 2px 18px}
+.meal-slot.filled{transition:transform .18s ease,opacity .18s ease;touch-action:pan-y}
+.meal-slot.filled.swiping{transition:none;box-shadow:12px 0 0 #b94a43,24px 0 0 #b94a43,36px 0 0 #b94a43}
+@media(max-width:520px){
+ .recommend-head{display:block}
+ .recommend-head h2{margin-bottom:8px}
+ .recommend-actions{justify-content:flex-start}
+ .recommend-actions button{font-size:.86rem}
+}
+
+/* v11: aufgeräumte Hauptnavigation und Bereichs-Reiter */
+.section-tabs{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin:6px 18px 14px;padding:5px;background:#eceee9;border-radius:16px;position:sticky;top:0;z-index:12;box-shadow:0 4px 14px rgba(40,48,40,.05)}
+.section-tabs button{min-height:42px;border-radius:12px;background:transparent;color:var(--muted);font-size:13px;font-weight:800;padding:9px 10px}
+.section-tabs button.active{background:#fff;color:var(--green);box-shadow:0 2px 8px rgba(40,48,40,.08)}
