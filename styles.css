@@ -27,3 +27,14 @@ button{border:0}
 .chips{display:flex;gap:8px;overflow:auto;padding-bottom:4px}.chip{white-space:nowrap;background:#fff;border:1px solid var(--line);padding:9px 12px;border-radius:999px;font-size:12px;font-weight:700}.chip.active{background:var(--green);color:#fff;border-color:var(--green)}
 .notice{background:#fff7e9;border:1px solid #efd9b8;color:#6c542e;padding:12px 14px;border-radius:16px;font-size:12px;line-height:1.4;margin:12px 0}
 @media(min-width:620px){.grid{grid-template-columns:repeat(3,1fr)}.recipe-cover{height:135px}}
+/* v2: Bilder, Entdecken & lernende Vorschläge */
+.nav{grid-template-columns:repeat(6,1fr)}
+.recipe-cover{position:relative;background-size:cover;background-position:center;align-items:flex-end}.recipe-cover.has-image:after,.detail-cover.has-image:after{content:"";position:absolute;inset:0;background:linear-gradient(transparent 45%,rgba(0,0,0,.28));pointer-events:none}.recipe-cover.has-image span{position:relative;z-index:1;text-shadow:0 2px 8px rgba(0,0,0,.35)}
+.detail-cover{position:relative;background-size:cover;background-position:center}.detail-cover.has-image span{display:none}
+.learn-card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px 15px;display:flex;flex-direction:column;gap:4px;margin:12px 0}.learn-card b{font-size:14px}.learn-card span{font-size:12px;line-height:1.4;color:var(--muted)}
+.discover-hero{background:linear-gradient(135deg,#315b43,#8a6b3f)}
+.rating{background:#fff;border:1px solid var(--line);border-radius:18px;padding:14px;margin:18px 0}.rating span{font-weight:800;font-size:14px;display:block}.rating div{display:flex;gap:3px;margin:6px 0}.rating button{font-size:29px;padding:0 2px;background:none;color:#c8cbc7}.rating button.on{color:#d8a15d}.rating small{color:var(--muted)}
+.source-link{display:block;background:#f0f4f1;color:var(--green);padding:11px 13px;border-radius:14px;text-decoration:none;font-weight:700;font-size:13px;margin-bottom:12px}
+.image-preview{width:100%;height:160px;object-fit:cover;border-radius:16px;margin-bottom:8px}.upload-btn{display:block;background:var(--green2);color:var(--green)!important;border-radius:14px;padding:12px;text-align:center;cursor:pointer;margin-top:8px!important}.divider{display:flex;align-items:center;gap:12px;margin:20px 0;color:var(--muted);font-size:12px}.divider:before,.divider:after{content:"";height:1px;background:var(--line);flex:1}
+.suggest{width:100%;margin:7px 0 12px}.planned-mini{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:13px}.planned-mini img,.row-thumb{width:42px;height:42px;object-fit:cover;border-radius:11px}.planned-mini span{font-size:25px}.mini{width:34px;height:34px;font-size:14px}
+@media(max-width:390px){.nav button{font-size:9px}.nav .ico{font-size:19px}.recipe-title{font-size:14px}}
