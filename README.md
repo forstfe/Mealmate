@@ -14,3 +14,8 @@ Ersetze die bisherigen MealMate-Dateien in deinem Repository durch den Inhalt de
 - Untere Navigation auf vier Hauptbereiche reduziert: Start, Rezepte, Plan, Einkauf.
 - Rezepte und Entdecken sind jetzt ein gemeinsamer Bereich mit den Reitern „Meine Rezepte“ und „Erkunden“.
 - Einkauf und Vorrat sind jetzt ein gemeinsamer Bereich mit den Reitern „Einkaufsliste“ und „Vorrat“.
+
+
+## v12
+- Wochenplan: Wischen nach links zeigt erst die rote Aktion „Löschen“. Erst ein Tipp darauf entfernt die Mahlzeit.
+- Startseite: Empfehlungen ohne Bild versuchen automatisch ein passendes Rezeptbild über den eingerichteten Chefkoch-Worker zu laden.

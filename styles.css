@@ -81,3 +81,64 @@ button{border:0}
 .section-tabs{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin:6px 18px 14px;padding:5px;background:#eceee9;border-radius:16px;position:sticky;top:0;z-index:12;box-shadow:0 4px 14px rgba(40,48,40,.05)}
 .section-tabs button{min-height:42px;border-radius:12px;background:transparent;color:var(--muted);font-size:13px;font-weight:800;padding:9px 10px}
 .section-tabs button.active{background:#fff;color:var(--green);box-shadow:0 2px 8px rgba(40,48,40,.08)}
+
+/* v12: swipe action with explicit delete confirmation */
+.meal-swipe-wrap{position:relative;overflow:hidden;background:#b94a43;border-top:1px solid var(--line)}
+.meal-swipe-wrap:first-of-type{border-top:0}
+.meal-swipe-wrap .meal-slot{position:relative;z-index:2;border-top:0;background:#f8fbf9;will-change:transform}
+.meal-delete-action{position:absolute;z-index:1;right:0;top:0;bottom:0;width:92px;border:0;border-radius:0;background:#b94a43;color:#fff;font-weight:800;font-size:14px;display:grid;place-items:center;cursor:pointer}
+.meal-swipe-wrap.revealed .meal-slot{transform:translateX(-92px)}
+.meal-slot.filled.swiping{box-shadow:none}
+
+/* v13: Dark Mode */
+.theme-picker{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:5px;background:#eceee9;border-radius:16px}
+.theme-picker button{min-height:44px;padding:9px 6px;border-radius:12px;background:transparent;color:var(--muted);font-size:12px;font-weight:800}
+.theme-picker button.active{background:var(--card);color:var(--green);box-shadow:0 2px 8px rgba(40,48,40,.08)}
+.theme-hint{padding:8px 3px 0}
+
+html[data-theme="dark"]{
+ --bg:#111612;--card:#1a211b;--text:#f2f5f2;--muted:#9ea89f;--line:#2d362f;
+ --green:#8fc9a2;--green2:#23372a;--accent:#e0ad69;--danger:#ef8e86;
+ --shadow:0 10px 30px rgba(0,0,0,.28)
+}
+html[data-theme="dark"] body{background:var(--bg)}
+html[data-theme="dark"] .top{background:linear-gradient(var(--bg) 82%,rgba(17,22,18,0))}
+html[data-theme="dark"] .nav{background:rgba(24,31,25,.94)}
+html[data-theme="dark"] .modal-head{background:var(--bg)}
+html[data-theme="dark"] .close{background:#252c26;color:var(--text)}
+html[data-theme="dark"] .search input,
+html[data-theme="dark"] .field input,
+html[data-theme="dark"] .field textarea,
+html[data-theme="dark"] .field select,
+html[data-theme="dark"] .amount-form input,
+html[data-theme="dark"] .amount-form select,
+html[data-theme="dark"] .amount-edit input,
+html[data-theme="dark"] .amount-edit select{background:var(--card);color:var(--text);border-color:var(--line)}
+html[data-theme="dark"] input::placeholder,html[data-theme="dark"] textarea::placeholder{color:#748077}
+html[data-theme="dark"] .pill{background:#252d26;color:#c3cbc4}
+html[data-theme="dark"] .day-card,
+html[data-theme="dark"] .chef-feed-card,
+html[data-theme="dark"] .chef-loader,
+html[data-theme="dark"] .kpi,
+html[data-theme="dark"] .rating{background:var(--card)}
+html[data-theme="dark"] .meal-slot,
+html[data-theme="dark"] .meal-slot.filled,
+html[data-theme="dark"] .meal-swipe-wrap .meal-slot{background:#171e18}
+html[data-theme="dark"] .covered{background:#19261d;border-color:#2b3b30}
+html[data-theme="dark"] .notice{background:#2a2418;border-color:#55472e;color:#e6c991}
+html[data-theme="dark"] .section-tabs,
+html[data-theme="dark"] .theme-picker{background:#151c17}
+html[data-theme="dark"] .section-tabs button.active,
+html[data-theme="dark"] .theme-picker button.active{background:#273129;color:var(--green);box-shadow:0 2px 8px rgba(0,0,0,.3)}
+html[data-theme="dark"] .chef-feed-actions a{background:#252d26;color:#c8d0c9}
+html[data-theme="dark"] .source-link{background:#203026}
+html[data-theme="dark"] .danger{background:#3b2322;color:#ffaaa3}
+html[data-theme="dark"] .check{background:#171e18;border-color:#536057}
+html[data-theme="dark"] .check.done{background:var(--green);color:#102015;border-color:var(--green)}
+html[data-theme="dark"] .recipe-cover{background:linear-gradient(140deg,#253229,#352e24)}
+html[data-theme="dark"] .detail-cover{background:linear-gradient(135deg,#253229,#352e24)}
+html[data-theme="dark"] .chef-feed-image{background:linear-gradient(135deg,#253229,#352e24)}
+html[data-theme="dark"] .chef-badge{background:rgba(27,34,28,.92);color:#b8e4c5}
+html[data-theme="dark"] .toast{background:#eef3ef;color:#111612}
+html[data-theme="dark"] .hero{box-shadow:0 10px 30px rgba(0,0,0,.35)}
+@media(max-width:390px){.theme-picker button{font-size:11px;padding-inline:3px}}

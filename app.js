@@ -24,7 +24,7 @@ const seed={
   {id:'p5',name:'Kartoffeln',quantity:500,unit:'g'},
   {id:'p6',name:'Milch',quantity:250,unit:'ml'}
  ],
- shopping:[],planner:{},settings:{name:'Felix'},taste:{ratings:0}
+ shopping:[],planner:{},settings:{name:'Felix',theme:'system'},taste:{ratings:0}
 };
 
 function esc(s=''){return String(s).replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]))}
@@ -55,13 +55,18 @@ function cover(r,detail=false){const u=safeUrl(r.image||'');return u?`<div class
 function emptyMealPlan(){return {breakfast:null,lunch:null,dinner:null}}
 function normalizePantryItem(p){if(typeof p==='string'){const x=parseIngredient(p);return {id:uid(),name:x.name||p,quantity:x.quantity||1,unit:x.unit||'Stück'}}return {id:p.id||uid(),name:p.name||p.text||'Zutat',quantity:Number(p.quantity)||0,unit:normalizeUnit(p.unit)||'Stück'}}
 function normalizeShoppingItem(x){if(typeof x==='string')x={text:x};if(x.text&&!x.name){const p=parseIngredient(x.text);x={...x,name:p.name,quantity:p.quantity||1,unit:p.unit||'Stück'}}const unit=normalizeUnit(x.unit)||'Stück',quantity=Number(x.quantity)||0;return {id:x.id||uid(),name:x.name||'Artikel',quantity,unit,done:!!x.done,requiredBase:Number(x.requiredBase)||toBase(Number(x.requiredQuantity)||quantity,unit),availableBase:Number(x.availableBase)||0,source:x.source||'manuell'}}
-function migrate(d){d=d||clone(seed);d.recipes=d.recipes||[];d.recipes.forEach(r=>{r.image??='';r.rating??=0;r.cookedCount??=0;r.lastCooked??=null;r.source??=null;r.tags??=[];r.ingredients??=[];r.steps??=[]});d.taste??={ratings:0};d.settings??={name:'Felix'};d.settings.chefProxy=CHEF_PROXY;d.pantry=(d.pantry||[]).map(normalizePantryItem);d.shopping=(d.shopping||[]).map(normalizeShoppingItem);const old=d.planner||{};d.planner={};Object.entries(old).forEach(([k,v])=>{d.planner[k]=typeof v==='string'?{breakfast:null,lunch:v,dinner:null}:{...emptyMealPlan(),...(v||{})}});return d}
+function migrate(d){d=d||clone(seed);d.recipes=d.recipes||[];d.recipes.forEach(r=>{r.image??='';r.rating??=0;r.cookedCount??=0;r.lastCooked??=null;r.source??=null;r.tags??=[];r.ingredients??=[];r.steps??=[]});d.taste??={ratings:0};d.settings??={name:'Felix'};d.settings.chefProxy=CHEF_PROXY;d.settings.theme=['light','dark','system'].includes(d.settings.theme)?d.settings.theme:'system';d.pantry=(d.pantry||[]).map(normalizePantryItem);d.shopping=(d.shopping||[]).map(normalizeShoppingItem);const old=d.planner||{};d.planner={};Object.entries(old).forEach(([k,v])=>{d.planner[k]=typeof v==='string'?{breakfast:null,lunch:v,dinner:null}:{...emptyMealPlan(),...(v||{})}});return d}
 const store={get(){try{const raw=localStorage.getItem('mealmate_data');return migrate(raw?JSON.parse(raw):clone(seed))}catch{return migrate(clone(seed))}},set(v){localStorage.setItem('mealmate_data',JSON.stringify(v))}};
 let data=store.get(),view='home',filter='Alle',search='',modal=null,toast='';
 let recipeSection='mine', stockSection='shopping';
 let recommendationOffset=0,recommendationCycle=[];
+let recommendationImageLoading=new Set();
 let planSwipeConsumed=false;
 let chefFeed=[],chefQuery='Schnelle Gerichte',chefLoading=false,chefError='';
+function effectiveTheme(){return data.settings.theme==='system'?(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):data.settings.theme}
+function applyTheme(){const t=effectiveTheme();document.documentElement.dataset.theme=t;document.documentElement.style.colorScheme=t;const meta=document.querySelector('meta[name=\"theme-color\"]');if(meta)meta.content=t==='dark'?'#111612':'#f7f6f2'}
+applyTheme();
+try{matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>{if(data.settings.theme==='system'){applyTheme();render()}})}catch{}
 function save(){store.set(data);render()}
 function flash(msg){toast=msg;render();setTimeout(()=>{toast='';render()},2600)}
 function nav(){return `<nav class="nav">${[['home','⌂','Start'],['recipes','◫','Rezepte'],['plan','◷','Plan'],['shopping','✓','Einkauf']].map(([v,i,l])=>`<button data-nav="${v}" class="${view===v?'active':''}"><span class="ico">${i}</span>${l}</button>`).join('')}</nav>`}
@@ -93,7 +98,11 @@ function discoverBody(){const qs=['Schnelle Gerichte','Lasagne','Hähnchen','Pas
 
 function recipesBody(){const tags=['Alle','Favoriten','Schnell','Vegetarisch','Proteinreich','Meal Prep'];const list=data.recipes.filter(r=>{const q=search.toLowerCase(),qok=!q||r.title.toLowerCase().includes(q)||r.ingredients.join(' ').toLowerCase().includes(q),fok=filter==='Alle'||(filter==='Favoriten'?r.favorite:r.tags.includes(filter));return qok&&fok});return `<main class="content"><div class="search"><input id="globalSearch" placeholder="Suche nach Rezept oder Zutat…" value="${esc(search)}"></div><div class="chips">${tags.map(t=>`<button class="chip ${filter===t?'active':''}" data-filter="${t}">${t}</button>`).join('')}</div><div class="section-title"><h2>Deine Rezepte</h2><button data-action="importRecipe">Importieren</button></div><div class="grid">${list.map(recipeCard).join('')||'<div class="empty">Keine Treffer.</div>'}</div></main><button class="fab" data-action="addRecipe">+</button>`}
 function recipes(){const mine=recipeSection==='mine';return `${header('Rezepte',mine?`${data.recipes.length} gespeichert`:'Chefkoch entdecken')}${sectionTabs('recipes',[['mine','Meine Rezepte'],['explore','Erkunden']],recipeSection)}${mine?recipesBody():discoverBody()}${nav()}`}
-function mealSlot(k,meal,label,icon){const rid=data.planner[k]?.[meal],r=data.recipes.find(x=>x.id===rid);return `<div class="meal-slot ${r?'filled':''}" data-plan="${k}" data-meal="${meal}" role="button" tabindex="0" ${r?'draggable="true"':''}><span class="meal-icon">${icon}</span><span class="meal-copy"><small>${label}</small>${r?`<b>${esc(r.title)}</b><em>${matchRecipe(r)}% Vorrat · ${r.time} Min.</em>`:`<b>Gericht auswählen</b><em>Antippen zum Planen</em>`}</span>${r?`<span class="drag-handle" data-drag-handle aria-label="Gericht verschieben" title="Ziehen zum Verschieben">⠿</span>`:`<span class="chev">›</span>`}</div>`}
+function mealSlot(k,meal,label,icon){
+ const rid=data.planner[k]?.[meal],r=data.recipes.find(x=>x.id===rid);
+ const slot=`<div class="meal-slot ${r?'filled':''}" data-plan="${k}" data-meal="${meal}" role="button" tabindex="0" ${r?'draggable="true"':''}><span class="meal-icon">${icon}</span><span class="meal-copy"><small>${label}</small>${r?`<b>${esc(r.title)}</b><em>${matchRecipe(r)}% Vorrat · ${r.time} Min.</em>`:`<b>Gericht auswählen</b><em>Antippen zum Planen</em>`}</span>${r?`<span class="drag-handle" data-drag-handle aria-label="Gericht verschieben" title="Ziehen zum Verschieben">⠿</span>`:`<span class="chev">›</span>`}</div>`;
+ return r?`<div class="meal-swipe-wrap" data-swipe-wrap><button class="meal-delete-action" data-plan-delete="${k}|${meal}" aria-label="${esc(r.title)} aus dem Wochenplan löschen">Löschen</button>${slot}</div>`:slot;
+}
 function plan(){const days=[0,1,2,3,4,5,6].map(addDays);return `${header('Wochenplan','Frühstück, Mittag- und Abendessen')}<main class="content"><button class="primary suggest" data-action="suggestWeek">✦ Ganze Woche automatisch vorschlagen</button><div class="learn-card"><b>21 Mahlzeiten im Blick</b><span>MealMate berücksichtigt Geschmack, Vorräte, Kochhistorie und Abwechslung.</span></div><div class="week-list">${days.map(d=>{const k=dateKey(d);data.planner[k]??=emptyMealPlan();return `<section class="day-card"><div class="day-head"><div><b>${d.toLocaleDateString('de-DE',{weekday:'long'})}</b><span>${d.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'})}</span></div></div>${MEALS.map(([meal,label,icon])=>mealSlot(k,meal,label,icon)).join('')}</section>`}).join('')}</div><div class="section-title"><h2>Einkauf automatisch ergänzen</h2></div><button class="primary full" data-action="planToShopping">Benötigte Zutaten abzüglich Vorrat hinzufügen</button></main>${nav()}`}
 function unitOptions(selected='Stück'){return UNITS.map(u=>`<option ${u===selected?'selected':''}>${u}</option>`).join('')}
 function addForm(id,placeholder,buttonLabel='+'){return `<form id="${id}" class="amount-form"><input name="name" placeholder="${placeholder}" required><input name="quantity" type="number" inputmode="decimal" min="0.01" step="0.01" value="1" required><select name="unit">${unitOptions('Stück')}</select><button class="primary">${buttonLabel}</button></form>`}
@@ -109,8 +118,8 @@ function recipeForm(r={}){return `<div class="modal-back"><section class="modal"
 function importModal(){return `<div class="modal-back"><section class="modal"><div class="modal-head"><h2>Rezept importieren</h2><button class="close" data-close>×</button></div><form id="urlImportForm"><div class="field"><label>Chefkoch- oder Rezept-Link</label><input name="url" type="url" placeholder="https://www.chefkoch.de/rezepte/…" required></div><button class="primary full">Link automatisch einlesen</button><div id="importStatus" class="row-sub topgap"></div></form><div class="divider"><span>oder</span></div><form id="importForm"><div class="field"><label>Titel</label><input name="title" placeholder="z. B. Lasagne"></div><div class="field"><label>Rezepttext</label><textarea name="text" class="bigtext" placeholder="Zutaten:\n500 g ...\n...\n\nZubereitung:\n1. ..."></textarea></div><div class="field"><label>Bild-URL (optional)</label><input name="image" placeholder="https://…"></div><button class="secondary full">Text importieren</button></form></section></div>`}
 function planModal(date,meal){const label=MEALS.find(x=>x[0]===meal)?.[1]||'Gericht';return `<div class="modal-back"><section class="modal"><div class="modal-head"><h2>${label} wählen</h2><button class="close" data-close>×</button></div><div class="list">${[...data.recipes].sort((a,b)=>scoreRecipe(b)-scoreRecipe(a)).map(r=>`<button class="row choice-row" data-plan-recipe="${r.id}" data-date="${date}" data-meal="${meal}">${r.image?`<img class="row-thumb" src="${esc(safeUrl(r.image))}" alt="">`:`<div class="choice-emoji">${r.emoji}</div>`}<div class="row-main"><div class="row-title">${esc(r.title)}</div><div class="row-sub">${r.time} Min. · ${matchRecipe(r)}% Vorrat</div></div></button>`).join('')}</div><div class="topgap"></div><button class="secondary danger full" data-plan-recipe="" data-date="${date}" data-meal="${meal}">Planung entfernen</button></section></div>`}
 function pantryEditModal(p){return `<div class="modal-back"><section class="modal"><div class="modal-head"><h2>Vorrat ändern</h2><button class="close" data-close>×</button></div><form id="pantryEditForm" data-id="${p.id}"><div class="field"><label>Lebensmittel</label><input name="name" value="${esc(p.name)}" required></div><div class="amount-edit"><input name="quantity" type="number" inputmode="decimal" min="0" step="0.01" value="${p.quantity}" required><select name="unit">${unitOptions(p.unit)}</select></div><button class="primary full topgap">Speichern</button></form></section></div>`}
-function settingsModal(){return `<div class="modal-back"><section class="modal"><div class="modal-head"><h2>Einstellungen</h2><button class="close" data-close>×</button></div><div class="row"><div class="row-main"><div class="row-title">Lernen & Empfehlungen</div><div class="row-sub">Bewertungen, Favoriten, Kochhistorie und Vorräte bleiben lokal auf deinem Gerät.</div></div></div><div class="section-title"><h2>Datensicherung</h2></div><div class="actions"><button class="secondary" data-action="export">Exportieren</button><label class="secondary import-label">Importieren<input id="backupFile" type="file" accept="application/json" hidden></label></div><div class="section-title"><h2>Installation auf dem iPhone</h2></div><div class="notice">In Safari öffnen → Teilen → „Zum Home-Bildschirm“. Danach startet MealMate wie eine normale App im Vollbild.</div></section></div>`}
-function render(){if(view==='discover'){view='recipes';recipeSection='explore'}if(view==='pantry'){view='shopping';stockSection='pantry'}const html=view==='home'?home():view==='recipes'?recipes():view==='plan'?plan():shopping();$('#app').innerHTML=`<div class="app">${html}${modal||''}${toast?`<div class="toast">${esc(toast)}</div>`:''}</div>`;bind()}
+function settingsModal(){const theme=data.settings.theme||'system';return `<div class="modal-back"><section class="modal"><div class="modal-head"><h2>Einstellungen</h2><button class="close" data-close>×</button></div><div class="row"><div class="row-main"><div class="row-title">Lernen & Empfehlungen</div><div class="row-sub">Bewertungen, Favoriten, Kochhistorie und Vorräte bleiben lokal auf deinem Gerät.</div></div></div><div class="section-title"><h2>Darstellung</h2></div><div class="theme-picker" role="group" aria-label="Darstellung"><button data-theme-choice="light" class="${theme==='light'?'active':''}">☀️ Hell</button><button data-theme-choice="dark" class="${theme==='dark'?'active':''}">🌙 Dunkel</button><button data-theme-choice="system" class="${theme==='system'?'active':''}">◐ Automatisch</button></div><div class="row-sub theme-hint">„Automatisch“ übernimmt die Hell-/Dunkel-Einstellung deines iPhones.</div><div class="section-title"><h2>Datensicherung</h2></div><div class="actions"><button class="secondary" data-action="export">Exportieren</button><label class="secondary import-label">Importieren<input id="backupFile" type="file" accept="application/json" hidden></label></div><div class="section-title"><h2>Installation auf dem iPhone</h2></div><div class="notice">In Safari öffnen → Teilen → „Zum Home-Bildschirm“. Danach startet MealMate wie eine normale App im Vollbild.</div></section></div>`}
+function render(){applyTheme();if(view==='discover'){view='recipes';recipeSection='explore'}if(view==='pantry'){view='shopping';stockSection='pantry'}const html=view==='home'?home():view==='recipes'?recipes():view==='plan'?plan():shopping();$('#app').innerHTML=`<div class="app">${html}${modal||''}${toast?`<div class="toast">${esc(toast)}</div>`:''}</div>`;bind()}
 
 function addRequirement(name,quantity,unit,source='manuell'){
  name=String(name||'').trim();unit=normalizeUnit(unit);quantity=Number(quantity);if(!name||!unit||!(quantity>0))return null;
@@ -150,32 +159,73 @@ function bindPlanDragDrop(){
 }
 
 function bindPlanSwipeDelete(){
- $$('.meal-slot.filled[data-plan]').forEach(slot=>{
-  let startX=0,startY=0,dx=0,active=false;
+ $$('.meal-swipe-wrap').forEach(wrap=>{
+  const slot=$('.meal-slot.filled',wrap);if(!slot)return;
+  let startX=0,startY=0,dx=0,active=false,revealed=false;
+  const reveal=()=>{revealed=true;wrap.classList.add('revealed');slot.style.transform='translateX(-92px)'};
+  const close=()=>{revealed=false;wrap.classList.remove('revealed');slot.classList.remove('swiping');slot.style.transform=''};
   slot.addEventListener('pointerdown',e=>{
    if(e.pointerType==='mouse'||e.target.closest('[data-drag-handle]'))return;
-   startX=e.clientX;startY=e.clientY;dx=0;active=true;
+   startX=e.clientX;startY=e.clientY;dx=revealed?-92:0;active=true;
   });
   slot.addEventListener('pointermove',e=>{
    if(!active)return;
-   const x=e.clientX-startX,y=e.clientY-startY;
-   if(Math.abs(y)>Math.abs(x)&&Math.abs(y)>12){active=false;slot.style.transform='';return}
-   if(x<0&&Math.abs(x)>8){dx=Math.max(x,-130);slot.classList.add('swiping');slot.style.transform=`translateX(${dx}px)`;e.preventDefault()}
+   const rawX=e.clientX-startX,y=e.clientY-startY;
+   if(Math.abs(y)>Math.abs(rawX)&&Math.abs(y)>12){active=false;return}
+   const base=revealed?-92:0;
+   const x=Math.min(0,Math.max(-104,base+rawX));
+   if(Math.abs(x-base)>6){dx=x;slot.classList.add('swiping');slot.style.transform=`translateX(${dx}px)`;planSwipeConsumed=true;e.preventDefault()}
   },{passive:false});
   const finish=()=>{
-   if(!active){slot.classList.remove('swiping');slot.style.transform='';return}
-   active=false;
-   if(dx<=-72){
-    const k=slot.dataset.plan,meal=slot.dataset.meal;
-    data.planner[k]??=emptyMealPlan();data.planner[k][meal]=null;store.set(data);
-    planSwipeConsumed=true;render();flash('Gericht aus dem Wochenplan gelöscht.');
-   }else{slot.classList.remove('swiping');slot.style.transform=''}
+   if(!active)return;
+   active=false;slot.classList.remove('swiping');
+   if(dx<=-46)reveal();else close();
+   setTimeout(()=>{planSwipeConsumed=false},180);
   };
   slot.addEventListener('pointerup',finish);
-  slot.addEventListener('pointercancel',finish);
+  slot.addEventListener('pointercancel',()=>{active=false;if(revealed)reveal();else close()});
+ });
+ $$('[data-plan-delete]').forEach(btn=>btn.onclick=e=>{
+  e.preventDefault();e.stopPropagation();
+  const [k,meal]=btn.dataset.planDelete.split('|');
+  data.planner[k]??=emptyMealPlan();data.planner[k][meal]=null;
+  store.set(data);planSwipeConsumed=true;render();flash('Gericht aus dem Wochenplan gelöscht.');
+  setTimeout(()=>{planSwipeConsumed=false},180);
  });
 }
 
+function titleTokens(v=''){return String(v).toLowerCase().replace(/[^\p{L}\p{N}\s-]/gu,' ').split(/[\s-]+/).filter(x=>x.length>2&&!['und','mit','der','die','das','ein','eine'].includes(x))}
+function titleSimilarity(a,b){const A=new Set(titleTokens(a)),B=new Set(titleTokens(b));if(!A.size||!B.size)return 0;let hit=0;A.forEach(x=>{if(B.has(x))hit++});return hit/Math.max(1,Math.min(A.size,B.size))}
+async function chefSearchItems(q){
+ const res=await fetch(chefProxyUrl(chefUrl(q)),{headers:{Accept:'text/html'}});if(!res.ok)throw new Error(`HTTP ${res.status}`);
+ const html=await res.text(),doc=new DOMParser().parseFromString(html,'text/html'),items=[],seen=new Set();
+ [...doc.querySelectorAll('a[href*=\"/rezepte/\"]')].forEach(a=>{
+  let href=a.getAttribute('href')||'';if(!href||href==='/rezepte/'||href.includes('/rezepte/suche'))return;
+  try{href=new URL(href,'https://www.chefkoch.de').href}catch{return}
+  if(!/chefkoch\.de\/rezepte\/\d+/i.test(href)||seen.has(href))return;
+  const box=a.closest('article,li,[class*=\"recipe\"],[class*=\"result\"],[class*=\"card\"]')||a.parentElement;
+  const title=(a.querySelector('h2,h3,[class*=\"title\"]')?.textContent||a.getAttribute('title')||a.textContent||'').replace(/\s+/g,' ').trim();
+  if(title.length<3)return;
+  const img=box?.querySelector('img')||a.querySelector('img');let image=img?.getAttribute('src')||img?.getAttribute('data-src')||img?.getAttribute('data-lazy-src')||'';
+  try{if(image)image=new URL(image,'https://www.chefkoch.de').href}catch{image=''}
+  if(!image)return;
+  seen.add(href);items.push({title,url:href,image});
+ });
+ return items;
+}
+async function ensureRecommendationImages(){
+ if(view!=='home'||!normalizeProxy(CHEF_PROXY))return;
+ const targets=recommendationList().filter(r=>!safeUrl(r.image||'')&&!recommendationImageLoading.has(r.id));
+ for(const r of targets){
+  recommendationImageLoading.add(r.id);
+  try{
+   const items=await chefSearchItems(r.title);
+   const best=items.map(x=>({...x,sim:titleSimilarity(r.title,x.title)})).sort((a,b)=>b.sim-a.sim)[0];
+   if(best?.image&&best.sim>=.34){r.image=best.image;store.set(data);if(view==='home')render()}
+  }catch{}
+  finally{recommendationImageLoading.delete(r.id)}
+ }
+}
 function chefUrl(q){return `https://www.chefkoch.de/rs/s0/${encodeURIComponent(q)}/Rezepte.html`}
 function normalizeProxy(v=''){try{const u=new URL(String(v).trim());if(u.protocol!=='https:')return '';return u.origin+u.pathname.replace(/\/$/,'')}catch{return ''}}
 function chefProxyUrl(target){const base=normalizeProxy(CHEF_PROXY);if(!base)throw new Error('Cloudflare-Worker ist noch nicht eingerichtet.');return `${base}/proxy?url=${encodeURIComponent(target)}`}
@@ -228,6 +278,7 @@ function bind(){
  $$('[data-section-tab]').forEach(b=>b.onclick=()=>{if(b.dataset.sectionGroup==='recipes'){recipeSection=b.dataset.sectionTab;view='recipes'}else{stockSection=b.dataset.sectionTab;view='shopping'}modal=null;render()});
  $$('[data-recipe]').forEach(c=>c.onclick=()=>{const r=data.recipes.find(x=>x.id===c.dataset.recipe);modal=recipeModal(r);render()});
  $$('[data-close]').forEach(b=>b.onclick=()=>{modal=null;render()});
+ $$('[data-theme-choice]').forEach(b=>b.onclick=()=>{data.settings.theme=b.dataset.themeChoice;store.set(data);applyTheme();modal=settingsModal();render()});
  $$('[data-filter]').forEach(b=>b.onclick=()=>{filter=b.dataset.filter;render()});
  const gs=$('#globalSearch');if(gs)gs.oninput=e=>{search=e.target.value;if(view==='home'){view='recipes';recipeSection='mine'}render()};
  $$('[data-action]').forEach(b=>b.onclick=e=>action(b.dataset.action,b.dataset.id,e));
@@ -239,6 +290,7 @@ function bind(){
  $$('[data-plan]').forEach(b=>{b.onclick=()=>{if(planSwipeConsumed){planSwipeConsumed=false;return}if(planDragMoved){planDragMoved=false;return}modal=planModal(b.dataset.plan,b.dataset.meal);render()};b.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();modal=planModal(b.dataset.plan,b.dataset.meal);render()}}});
  bindPlanDragDrop();
  bindPlanSwipeDelete();
+ if(view==='home')setTimeout(ensureRecommendationImages,0);
  $$('[data-plan-recipe]').forEach(b=>b.onclick=()=>{data.planner[b.dataset.date]??=emptyMealPlan();data.planner[b.dataset.date][b.dataset.meal]=b.dataset.planRecipe||null;modal=null;save()});
  $$('[data-rate]').forEach(b=>b.onclick=()=>{const r=data.recipes.find(x=>x.id===b.dataset.id);r.rating=+b.dataset.rate;data.taste.ratings=(data.taste.ratings||0)+1;modal=recipeModal(r);save()});
  $$('[data-chef]').forEach(b=>b.onclick=()=>window.open(chefUrl(b.dataset.chef),'_blank','noopener'));
