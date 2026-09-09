@@ -57,6 +57,7 @@ function normalizeShoppingItem(x){if(typeof x==='string')x={text:x};if(x.text&&!
 function migrate(d){d=d||clone(seed);d.recipes=d.recipes||[];d.recipes.forEach(r=>{r.image??='';r.rating??=0;r.cookedCount??=0;r.lastCooked??=null;r.source??=null;r.tags??=[];r.ingredients??=[];r.steps??=[]});d.taste??={ratings:0};d.settings??={name:'Felix'};d.pantry=(d.pantry||[]).map(normalizePantryItem);d.shopping=(d.shopping||[]).map(normalizeShoppingItem);const old=d.planner||{};d.planner={};Object.entries(old).forEach(([k,v])=>{d.planner[k]=typeof v==='string'?{breakfast:null,lunch:v,dinner:null}:{...emptyMealPlan(),...(v||{})}});return d}
 const store={get(){try{const raw=localStorage.getItem('mealmate_data');return migrate(raw?JSON.parse(raw):clone(seed))}catch{return migrate(clone(seed))}},set(v){localStorage.setItem('mealmate_data',JSON.stringify(v))}};
 let data=store.get(),view='home',filter='Alle',search='',modal=null,toast='';
+let chefFeed=[],chefQuery='Schnelle Gerichte',chefLoading=false,chefError='';
 function save(){store.set(data);render()}
 function flash(msg){toast=msg;render();setTimeout(()=>{toast='';render()},2600)}
 function nav(){return `<nav class="nav">${[['home','⌂','Start'],['discover','✦','Entdecken'],['recipes','◫','Rezepte'],['plan','◷','Plan'],['shopping','✓','Einkauf'],['pantry','◉','Vorrat']].map(([v,i,l])=>`<button data-nav="${v}" class="${view===v?'active':''}"><span class="ico">${i}</span>${l}</button>`).join('')}</nav>`}
@@ -67,9 +68,11 @@ function scoreRecipe(r,used=[]){let s=matchRecipe(r)*.035+(r.favorite?2.2:0)+(r.
 function suggestedRecipe(meal,used){const usage={};used.forEach(r=>{if(r)usage[r.id]=(usage[r.id]||0)+1});const candidates=[...data.recipes];candidates.sort((a,b)=>{const bonus=r=>meal==='breakfast'?(r.tags.includes('Süß')||/pfannkuchen|müsli|brot|ei|joghurt/i.test(r.title)?3:-1):(r.tags.includes('Süß')?-1:1);return (scoreRecipe(b,used)+bonus(b)-(usage[b.id]||0)*1.8)-(scoreRecipe(a,used)+bonus(a)-(usage[a.id]||0)*1.8)});return candidates[0]||null}
 function suggestWeek(){const used=[];for(let i=0;i<7;i++){const k=dateKey(addDays(i));data.planner[k]=emptyMealPlan();for(const [meal] of MEALS){const r=suggestedRecipe(meal,used);if(r){data.planner[k][meal]=r.id;used.push(r)}}}save()}
 function home(){const possible=[...data.recipes].sort((a,b)=>scoreRecipe(b)-scoreRecipe(a)).slice(0,4);return `${header()}<main class="content"><section class="hero"><h1>Was kann ich essen?</h1><p>Ich gleiche Vorräte und Geschmack ab und werde mit jeder Bewertung persönlicher.</p></section><div class="learn-card"><b>MealMate lernt mit</b><span>${esc(preferenceSummary())}</span></div><div class="search"><input id="globalSearch" placeholder="Rezepte durchsuchen…" value="${esc(search)}"></div><div class="section-title"><h2>Für dich empfohlen</h2><button data-action="suggestWeek">Woche planen</button></div><div class="grid">${possible.map(recipeCard).join('')}</div><div class="section-title"><h2>Favoriten</h2><button data-nav="recipes">Alle</button></div><div class="grid">${data.recipes.filter(r=>r.favorite).slice(0,3).map(recipeCard).join('')||'<div class="empty">Noch keine Favoriten.</div>'}</div></main><button class="fab" data-action="addRecipe">+</button>${nav()}`}
-function discover(){const qs=['Lasagne','Schnelle Gerichte','Hähnchen','Pasta','Kartoffeln','Vegetarisch','Auflauf','Pfannkuchen'];return `${header('Entdecken','Chefkoch & deine persönlichen Empfehlungen')}<main class="content"><section class="hero discover-hero"><h1>Neue Rezepte finden</h1><p>Suche bei Chefkoch und importiere interessante Rezepte anschließend mit Bild in MealMate.</p></section><div class="section-title"><h2>Chefkoch durchsuchen</h2></div><div class="search"><input id="chefSearch" placeholder="z. B. Lasagne, Hähnchen, schnell…"><button class="primary" data-action="chefSearch">Suchen</button></div><div class="chips wrap">${qs.map(q=>`<button class="chip" data-chef="${esc(q)}">${esc(q)}</button>`).join('')}</div><div class="notice">Chefkoch öffnet sich in einem neuen Tab. Danach kannst du den Rezept-Link über „Importieren“ in MealMate übernehmen.</div><div class="section-title"><h2>Für dich</h2><button data-action="suggestWeek">Wochenplan vorschlagen</button></div><div class="grid">${[...data.recipes].sort((a,b)=>scoreRecipe(b)-scoreRecipe(a)).slice(0,6).map(recipeCard).join('')}</div><button class="primary full topgap" data-action="importRecipe">Rezept-Link importieren</button></main>${nav()}`}
+function chefFeedCard(x){return `<article class="chef-feed-card"><div class="chef-feed-image ${x.image?'has-image':''}" ${x.image?`style="background-image:url('${esc(safeUrl(x.image))}')"`:''}><span>${x.image?'':'🍲'}</span><div class="chef-badge">Chefkoch</div></div><div class="chef-feed-body"><h3>${esc(x.title)}</h3>${x.meta?`<p>${esc(x.meta)}</p>`:''}<div class="chef-feed-actions"><button class="secondary" data-chef-save="${esc(x.url)}">♡ Merken</button><button class="secondary" data-chef-plan="${esc(x.url)}">+ Plan</button><a href="${esc(x.url)}" target="_blank" rel="noopener">Original ↗</a></div></div></article>`}
+function discover(){const qs=['Schnelle Gerichte','Lasagne','Hähnchen','Pasta','Kartoffeln','Vegetarisch','Auflauf','Pfannkuchen'];return `${header('Entdecken','Chefkoch direkt durchscrollen')}<main class="content discover-content"><section class="hero discover-hero"><h1>Chefkoch entdecken</h1><p>Scrolle direkt in MealMate durch Rezeptvorschläge. Interessante Gerichte kannst du merken oder direkt in deinen Wochenplan übernehmen.</p></section><form id="chefFeedSearch" class="search chef-feed-search"><input name="q" id="chefSearch" placeholder="z. B. Lasagne, Hähnchen, schnell…" value="${esc(chefQuery)}"><button class="primary">Suchen</button></form><div class="chips wrap">${qs.map(q=>`<button class="chip ${chefQuery===q?'active':''}" data-chef-feed="${esc(q)}">${esc(q)}</button>`).join('')}</div><div class="section-title"><h2>Rezepte</h2><button data-action="reloadChefFeed">↻ Neu laden</button></div>${chefLoading?'<div class="chef-loader">Chefkoch-Rezepte werden geladen …</div>':chefError?`<div class="notice">${esc(chefError)}<br><button class="secondary topgap" data-action="openChefSearch">Suche bei Chefkoch öffnen ↗</button></div>`:`<div class="chef-feed">${chefFeed.map(chefFeedCard).join('')||'<div class="chef-loader">Feed wird vorbereitet …</div>'}</div>`}<div class="notice">Die Rezeptdetails bleiben bei Chefkoch. „Merken“ importiert die strukturierten Rezeptdaten in deine private MealMate-Sammlung, soweit Chefkoch sie technisch bereitstellt.</div><div class="section-title"><h2>Deine persönlichen Empfehlungen</h2></div><div class="grid">${[...data.recipes].sort((a,b)=>scoreRecipe(b)-scoreRecipe(a)).slice(0,3).map(recipeCard).join('')}</div></main>${nav()}`}
+
 function recipes(){const tags=['Alle','Favoriten','Schnell','Vegetarisch','Proteinreich','Meal Prep'];const list=data.recipes.filter(r=>{const q=search.toLowerCase(),qok=!q||r.title.toLowerCase().includes(q)||r.ingredients.join(' ').toLowerCase().includes(q),fok=filter==='Alle'||(filter==='Favoriten'?r.favorite:r.tags.includes(filter));return qok&&fok});return `${header('Rezepte',`${data.recipes.length} gespeichert`)}<main class="content"><div class="search"><input id="globalSearch" placeholder="Suche nach Rezept oder Zutat…" value="${esc(search)}"></div><div class="chips">${tags.map(t=>`<button class="chip ${filter===t?'active':''}" data-filter="${t}">${t}</button>`).join('')}</div><div class="section-title"><h2>Deine Rezepte</h2><button data-action="importRecipe">Importieren</button></div><div class="grid">${list.map(recipeCard).join('')||'<div class="empty">Keine Treffer.</div>'}</div></main><button class="fab" data-action="addRecipe">+</button>${nav()}`}
-function mealSlot(k,meal,label,icon){const rid=data.planner[k]?.[meal],r=data.recipes.find(x=>x.id===rid);return `<button class="meal-slot ${r?'filled':''}" data-plan="${k}" data-meal="${meal}"><span class="meal-icon">${icon}</span><span class="meal-copy"><small>${label}</small>${r?`<b>${esc(r.title)}</b><em>${matchRecipe(r)}% Vorrat · ${r.time} Min.</em>`:`<b>Gericht auswählen</b><em>Antippen zum Planen</em>`}</span><span class="chev">›</span></button>`}
+function mealSlot(k,meal,label,icon){const rid=data.planner[k]?.[meal],r=data.recipes.find(x=>x.id===rid);return `<div class="meal-slot ${r?'filled':''}" data-plan="${k}" data-meal="${meal}" role="button" tabindex="0" ${r?'draggable="true"':''}><span class="meal-icon">${icon}</span><span class="meal-copy"><small>${label}</small>${r?`<b>${esc(r.title)}</b><em>${matchRecipe(r)}% Vorrat · ${r.time} Min.</em>`:`<b>Gericht auswählen</b><em>Antippen zum Planen</em>`}</span>${r?`<span class="drag-handle" data-drag-handle aria-label="Gericht verschieben" title="Ziehen zum Verschieben">⠿</span>`:`<span class="chev">›</span>`}</div>`}
 function plan(){const days=[0,1,2,3,4,5,6].map(addDays);return `${header('Wochenplan','Frühstück, Mittag- und Abendessen')}<main class="content"><button class="primary suggest" data-action="suggestWeek">✦ Ganze Woche automatisch vorschlagen</button><div class="learn-card"><b>21 Mahlzeiten im Blick</b><span>MealMate berücksichtigt Geschmack, Vorräte, Kochhistorie und Abwechslung.</span></div><div class="week-list">${days.map(d=>{const k=dateKey(d);data.planner[k]??=emptyMealPlan();return `<section class="day-card"><div class="day-head"><div><b>${d.toLocaleDateString('de-DE',{weekday:'long'})}</b><span>${d.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'})}</span></div></div>${MEALS.map(([meal,label,icon])=>mealSlot(k,meal,label,icon)).join('')}</section>`}).join('')}</div><div class="section-title"><h2>Einkauf automatisch ergänzen</h2></div><button class="primary full" data-action="planToShopping">Benötigte Zutaten abzüglich Vorrat hinzufügen</button></main>${nav()}`}
 function unitOptions(selected='Stück'){return UNITS.map(u=>`<option ${u===selected?'selected':''}>${u}</option>`).join('')}
 function addForm(id,placeholder,buttonLabel='+'){return `<form id="${id}" class="amount-form"><input name="name" placeholder="${placeholder}" required><input name="quantity" type="number" inputmode="decimal" min="0.01" step="0.01" value="1" required><select name="unit">${unitOptions('Stück')}</select><button class="primary">${buttonLabel}</button></form>`}
@@ -102,7 +105,62 @@ function addPlannedIngredients(){const totals=[];Object.values(data.planner).for
 function addToPantry(name,quantity,unit){const group=unitGroup(unit),base=toBase(quantity,unit);let p=data.pantry.find(x=>nameMatches(x.name,name)&&unitGroup(x.unit)===group);if(p){const total=toBase(p.quantity,p.unit)+base;p.quantity=fromBase(total,p.unit)}else data.pantry.push({id:uid(),name,quantity:Number(quantity),unit:normalizeUnit(unit)});refreshShoppingAgainstPantry()}
 function stockShoppingItem(id){const x=data.shopping.find(i=>i.id===id);if(!x||!x.done||x.quantity<=0)return;addToPantry(x.name,x.quantity,x.unit);data.shopping=data.shopping.filter(i=>i.id!==id);save()}
 
+let planDrag=null,planDragMoved=false;
+function planCell(el){return el?{date:el.dataset.plan,meal:el.dataset.meal}:null}
+function movePlannedMeal(from,to){if(!from||!to||(from.date===to.date&&from.meal===to.meal))return false;data.planner[from.date]??=emptyMealPlan();data.planner[to.date]??=emptyMealPlan();const a=data.planner[from.date][from.meal]||null,b=data.planner[to.date][to.meal]||null;if(!a)return false;data.planner[to.date][to.meal]=a;data.planner[from.date][from.meal]=b;store.set(data);return true}
+function clearPlanDropState(){$$('.meal-slot.drag-over').forEach(x=>x.classList.remove('drag-over'));$$('.meal-slot.dragging').forEach(x=>x.classList.remove('dragging'));document.body.classList.remove('plan-dragging')}
+function bindPlanDragDrop(){
+ const slots=$$('.meal-slot[data-plan]');
+ slots.forEach(slot=>{
+  if(slot.classList.contains('filled')){
+   slot.ondragstart=e=>{planDrag=planCell(slot);planDragMoved=true;slot.classList.add('dragging');e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',`${planDrag.date}|${planDrag.meal}`)};
+   slot.ondragend=()=>{planDrag=null;setTimeout(()=>planDragMoved=false,80);clearPlanDropState()};
+  }
+  slot.ondragover=e=>{if(!planDrag)return;e.preventDefault();e.dataTransfer.dropEffect='move';$$('.meal-slot.drag-over').forEach(x=>x.classList.remove('drag-over'));slot.classList.add('drag-over')};
+  slot.ondrop=e=>{if(!planDrag)return;e.preventDefault();const from=planDrag,to=planCell(slot);planDrag=null;clearPlanDropState();if(movePlannedMeal(from,to)){planDragMoved=true;render();setTimeout(()=>planDragMoved=false,100)}};
+ });
+ $$('[data-drag-handle]').forEach(handle=>{
+  handle.onpointerdown=e=>{if(e.pointerType==='mouse')return;e.preventDefault();e.stopPropagation();const source=handle.closest('.meal-slot');planDrag=planCell(source);planDragMoved=false;source.classList.add('dragging');document.body.classList.add('plan-dragging');handle.setPointerCapture?.(e.pointerId)};
+  handle.onpointermove=e=>{if(!planDrag||e.pointerType==='mouse')return;e.preventDefault();planDragMoved=true;const target=document.elementFromPoint(e.clientX,e.clientY)?.closest?.('.meal-slot[data-plan]');$$('.meal-slot.drag-over').forEach(x=>x.classList.remove('drag-over'));if(target)target.classList.add('drag-over')};
+  handle.onpointerup=e=>{if(!planDrag||e.pointerType==='mouse')return;e.preventDefault();const from=planDrag,target=document.elementFromPoint(e.clientX,e.clientY)?.closest?.('.meal-slot[data-plan]'),to=planCell(target);planDrag=null;clearPlanDropState();if(target&&movePlannedMeal(from,to)){render();flash('Gericht im Wochenplan verschoben.')}else{planDragMoved=false;render()}};
+  handle.onpointercancel=()=>{planDrag=null;planDragMoved=false;clearPlanDropState()};
+ });
+}
+
 function chefUrl(q){return `https://www.chefkoch.de/rs/s0/${encodeURIComponent(q)}/Rezepte.html`}
+
+async function loadChefFeed(q=chefQuery){
+ chefQuery=(q||'Schnelle Gerichte').trim();chefLoading=true;chefError='';render();
+ try{
+  const target=chefUrl(chefQuery),proxy=`https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`;
+  const res=await fetch(proxy,{headers:{Accept:'text/html'}});if(!res.ok)throw new Error(`HTTP ${res.status}`);
+  const html=await res.text(),doc=new DOMParser().parseFromString(html,'text/html'),items=[],seen=new Set();
+  [...doc.querySelectorAll('a[href*="/rezepte/"]')].forEach(a=>{
+   let href=a.getAttribute('href')||'';if(!href||href==='/rezepte/'||href.includes('/rezepte/suche'))return;
+   try{href=new URL(href,'https://www.chefkoch.de').href}catch{return}
+   if(!/chefkoch\.de\/rezepte\/\d+/i.test(href)||seen.has(href))return;
+   const box=a.closest('article,li,[class*="recipe"],[class*="result"],[class*="card"]')||a.parentElement;
+   const title=(a.querySelector('h2,h3,[class*="title"]')?.textContent||a.getAttribute('title')||a.textContent||'').replace(/\s+/g,' ').trim();
+   if(title.length<3)return;
+   const img=box?.querySelector('img')||a.querySelector('img');let image=img?.getAttribute('src')||img?.getAttribute('data-src')||img?.getAttribute('data-lazy-src')||'';
+   try{if(image)image=new URL(image,'https://www.chefkoch.de').href}catch{image=''}
+   const text=(box?.textContent||'').replace(/\s+/g,' ').trim(),tm=text.match(/\d+\s*Min\.?/i),rating=text.match(/\d(?:[,.]\d)?\s*\/\s*5/);
+   seen.add(href);items.push({title:title.slice(0,150),url:href,image,meta:[tm?.[0],rating?.[0]].filter(Boolean).join(' · ')});
+  });
+  if(!items.length)throw new Error('Keine auslesbaren Rezeptkarten gefunden.');
+  chefFeed=items.slice(0,30);chefLoading=false;render();
+ }catch(err){chefFeed=[];chefLoading=false;chefError='Der eingebettete Chefkoch-Feed konnte gerade nicht geladen werden. Das kann passieren, wenn Chefkoch oder der benötigte Web-Zugriff externe Abfragen blockiert.';render()}
+}
+async function importChefToLibrary(url,planAfter=false){
+ flash('Rezept wird von Chefkoch eingelesen …');
+ try{
+  let r=data.recipes.find(x=>x.source?.url===url);
+  if(!r){r=await fetchRecipe(url);data.recipes.unshift(r);store.set(data)}
+  if(planAfter){modal=chefPlanModal(r);render()}else{r.favorite=true;store.set(data);flash(`${r.title} wurde gemerkt.`)}
+ }catch(err){window.open(url,'_blank','noopener');flash('Automatischer Import war nicht möglich – Chefkoch wurde geöffnet.')}
+}
+function chefPlanModal(r){const days=[0,1,2,3,4,5,6].map(addDays);return `<div class="modal-back"><section class="modal"><div class="modal-head"><h2>${esc(r.title)} planen</h2><button class="close" data-close>×</button></div><p class="row-sub">Wähle Tag und Mahlzeit.</p><div class="chef-plan-grid">${days.map(d=>{const k=dateKey(d);return `<div class="chef-plan-day"><b>${d.toLocaleDateString('de-DE',{weekday:'short',day:'2-digit',month:'2-digit'})}</b>${MEALS.map(([meal,label])=>`<button class="secondary" data-chef-slot="${k}|${meal}|${r.id}">${label}</button>`).join('')}</div>`}).join('')}</div></section></div>`}
+
 function jsonLdRecipe(doc){const scripts=[...doc.querySelectorAll('script[type="application/ld+json"]')];for(const s of scripts){try{const raw=JSON.parse(s.textContent),arr=Array.isArray(raw)?raw:(raw['@graph']||[raw]),r=arr.find(x=>{const t=x?.['@type'];return t==='Recipe'||(Array.isArray(t)&&t.includes('Recipe'))});if(r)return r}catch{}}return null}
 function durationMinutes(v){if(!v)return 30;const h=+(v.match(/(\d+)H/)?.[1]||0),m=+(v.match(/(\d+)M/)?.[1]||0);return h*60+m||30}
 function instructionText(x){if(Array.isArray(x))return x.flatMap(i=>i.itemListElement?instructionText(i.itemListElement):(typeof i==='string'?[i]:[i.text||i.name].filter(Boolean)));if(typeof x==='string')return [x];return []}
@@ -120,10 +178,17 @@ function bind(){
  $$('[data-stock-shopping]').forEach(b=>b.onclick=()=>stockShoppingItem(b.dataset.stockShopping));
  $$('[data-del-pantry]').forEach(b=>b.onclick=()=>{data.pantry=data.pantry.filter(x=>x.id!==b.dataset.delPantry);refreshShoppingAgainstPantry();save()});
  $$('[data-edit-pantry]').forEach(b=>b.onclick=()=>{modal=pantryEditModal(data.pantry.find(x=>x.id===b.dataset.editPantry));render()});
- $$('[data-plan]').forEach(b=>b.onclick=()=>{modal=planModal(b.dataset.plan,b.dataset.meal);render()});
+ $$('[data-plan]').forEach(b=>{b.onclick=()=>{if(planDragMoved){planDragMoved=false;return}modal=planModal(b.dataset.plan,b.dataset.meal);render()};b.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();modal=planModal(b.dataset.plan,b.dataset.meal);render()}}});
+ bindPlanDragDrop();
  $$('[data-plan-recipe]').forEach(b=>b.onclick=()=>{data.planner[b.dataset.date]??=emptyMealPlan();data.planner[b.dataset.date][b.dataset.meal]=b.dataset.planRecipe||null;modal=null;save()});
  $$('[data-rate]').forEach(b=>b.onclick=()=>{const r=data.recipes.find(x=>x.id===b.dataset.id);r.rating=+b.dataset.rate;data.taste.ratings=(data.taste.ratings||0)+1;modal=recipeModal(r);save()});
  $$('[data-chef]').forEach(b=>b.onclick=()=>window.open(chefUrl(b.dataset.chef),'_blank','noopener'));
+ $$('[data-chef-feed]').forEach(b=>b.onclick=()=>loadChefFeed(b.dataset.chefFeed));
+ $$('[data-chef-save]').forEach(b=>b.onclick=()=>importChefToLibrary(b.dataset.chefSave,false));
+ $$('[data-chef-plan]').forEach(b=>b.onclick=()=>importChefToLibrary(b.dataset.chefPlan,true));
+ $$('[data-chef-slot]').forEach(b=>b.onclick=()=>{const [k,meal,rid]=b.dataset.chefSlot.split('|');data.planner[k]??=emptyMealPlan();data.planner[k][meal]=rid;modal=null;save();flash('Gericht wurde in den Wochenplan eingetragen.')});
+ const cfs=$('#chefFeedSearch');if(cfs)cfs.onsubmit=e=>{e.preventDefault();loadChefFeed(new FormData(cfs).get('q'))};
+ if(view==='discover'&&!chefLoading&&!chefFeed.length&&!chefError)setTimeout(()=>loadChefFeed(chefQuery),0);
  const sf=$('#shoppingForm');if(sf)sf.onsubmit=e=>{e.preventDefault();const f=new FormData(sf),res=addRequirement(f.get('name'),f.get('quantity'),f.get('unit'));store.set(data);const msg=res?.missing>0?`${res.item.name}: ${formatQty(res.available,res.item.unit)} vorhanden – ${formatQty(res.missing,res.item.unit)} auf der Einkaufsliste.`:`${res?.item.name||'Artikel'} ist in ausreichender Menge vorhanden.`;flash(msg)};
  const pf=$('#pantryForm');if(pf)pf.onsubmit=e=>{e.preventDefault();const f=new FormData(pf);addToPantry(f.get('name'),f.get('quantity'),f.get('unit'));save()};
  const pe=$('#pantryEditForm');if(pe)pe.onsubmit=e=>{e.preventDefault();const f=new FormData(pe),p=data.pantry.find(x=>x.id===pe.dataset.id);p.name=f.get('name').trim();p.quantity=Number(f.get('quantity'))||0;p.unit=normalizeUnit(f.get('unit'));refreshShoppingAgainstPantry();modal=null;save()};
@@ -142,6 +207,8 @@ function action(a,id){
  if(a==='cooked'){const r=data.recipes.find(x=>x.id===id);r.cookedCount=(r.cookedCount||0)+1;r.lastCooked=new Date().toISOString();modal=recipeModal(r);save()}
  if(a==='suggestWeek')suggestWeek();
  if(a==='chefSearch'){const q=$('#chefSearch')?.value.trim();if(q)window.open(chefUrl(q),'_blank','noopener')}
+ if(a==='reloadChefFeed')loadChefFeed(chefQuery);
+ if(a==='openChefSearch')window.open(chefUrl(chefQuery),'_blank','noopener');
  if(a==='clearDone'){data.shopping=data.shopping.filter(x=>!x.done);save()}
  if(a==='recipeToShopping'){const r=data.recipes.find(x=>x.id===id);addRecipeIngredients(r);store.set(data);modal=recipeModal(r);flash('Zutaten wurden mit deinem Vorrat abgeglichen.')}
  if(a==='planToShopping'){const count=addPlannedIngredients();store.set(data);view='shopping';flash(count?`${count} geplante Mahlzeiten wurden mit dem Vorrat abgeglichen.`:'Im Wochenplan sind noch keine Mahlzeiten eingetragen.')}
