@@ -55,12 +55,12 @@ function cover(r,detail=false){const u=safeUrl(r.image||'');return u?`<div class
 function emptyMealPlan(){return {breakfast:null,lunch:null,dinner:null}}
 function normalizePantryItem(p){if(typeof p==='string'){const x=parseIngredient(p);return {id:uid(),name:x.name||p,quantity:x.quantity||1,unit:x.unit||'Stück'}}return {id:p.id||uid(),name:p.name||p.text||'Zutat',quantity:Number(p.quantity)||0,unit:normalizeUnit(p.unit)||'Stück'}}
 function normalizeShoppingItem(x){if(typeof x==='string')x={text:x};if(x.text&&!x.name){const p=parseIngredient(x.text);x={...x,name:p.name,quantity:p.quantity||1,unit:p.unit||'Stück'}}const unit=normalizeUnit(x.unit)||'Stück',quantity=Number(x.quantity)||0;return {id:x.id||uid(),name:x.name||'Artikel',quantity,unit,done:!!x.done,requiredBase:Number(x.requiredBase)||toBase(Number(x.requiredQuantity)||quantity,unit),availableBase:Number(x.availableBase)||0,source:x.source||'manuell'}}
-function migrate(d){d=d||clone(seed);d.recipes=d.recipes||[];d.recipes.forEach(r=>{r.image??='';r.rating??=0;r.cookedCount??=0;r.lastCooked??=null;r.source??=null;r.tags??=[];r.ingredients??=[];r.steps??=[];if(['r1','r2','r3','r4'].includes(r.id)&&!r.source&&/chefkoch/i.test(r.image||''))r.image=''});d.taste??={ratings:0};d.settings??={name:'Felix'};d.settings.chefProxy=CHEF_PROXY;d.settings.theme=['light','dark','system'].includes(d.settings.theme)?d.settings.theme:'system';d.pantry=(d.pantry||[]).map(normalizePantryItem);d.shopping=(d.shopping||[]).map(normalizeShoppingItem);const old=d.planner||{};d.planner={};Object.entries(old).forEach(([k,v])=>{d.planner[k]=typeof v==='string'?{breakfast:null,lunch:v,dinner:null}:{...emptyMealPlan(),...(v||{})}});return d}
+function migrate(d){d=d||clone(seed);d.recipes=d.recipes||[];d.recipes.forEach(r=>{r.image??='';r.rating??=0;r.cookedCount??=0;r.lastCooked??=null;r.source??=null;r.tags??=[];r.ingredients??=[];r.steps??=[]});d.taste??={ratings:0};d.settings??={name:'Felix'};d.settings.chefProxy=CHEF_PROXY;d.settings.theme=['light','dark','system'].includes(d.settings.theme)?d.settings.theme:'system';d.pantry=(d.pantry||[]).map(normalizePantryItem);d.shopping=(d.shopping||[]).map(normalizeShoppingItem);const old=d.planner||{};d.planner={};Object.entries(old).forEach(([k,v])=>{d.planner[k]=typeof v==='string'?{breakfast:null,lunch:v,dinner:null}:{...emptyMealPlan(),...(v||{})}});return d}
 const store={get(){try{const raw=localStorage.getItem('mealmate_data');return migrate(raw?JSON.parse(raw):clone(seed))}catch{return migrate(clone(seed))}},set(v){localStorage.setItem('mealmate_data',JSON.stringify(v))}};
 let data=store.get(),view='home',filter='Alle',search='',modal=null,toast='';
 let recipeSection='mine', stockSection='shopping';
 let recommendationOffset=0,recommendationCycle=[];
-let chefRecommendations=[],chefRecommendationLoading=false,chefRecommendationError='',chefRecommendationPage=0;
+let recommendationImageLoading=new Set();
 let planSwipeConsumed=false;
 let chefFeed=[],chefQuery='Schnelle Gerichte',chefLoading=false,chefError='';
 function effectiveTheme(){return data.settings.theme==='system'?(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):data.settings.theme}
@@ -86,49 +86,13 @@ function recommendationList(){
  for(let i=0;i<count;i++)out.push(ranked[(recommendationOffset+i)%ranked.length]);
  return out;
 }
-function tasteQueries(){
- const weights={};
- data.recipes.forEach(r=>{
-  const signal=(r.rating?Math.max(0,r.rating-2)*2:0)+(r.favorite?2:0)+Math.min(r.cookedCount||0,3)*.6;
-  if(signal<=0)return;
-  (r.tags||[]).forEach(t=>weights[t]=(weights[t]||0)+signal);
- });
- const tagQueries=Object.entries(weights).sort((a,b)=>b[1]-a[1]).map(([t])=>t).filter(t=>!/importiert/i.test(t));
- const liked=[...data.recipes].filter(r=>(r.rating||0)>=4||r.favorite).sort((a,b)=>((b.rating||0)*2+(b.favorite?2:0)+(b.cookedCount||0)*.2)-((a.rating||0)*2+(a.favorite?2:0)+(a.cookedCount||0)*.2)).map(r=>r.title);
- const base=['Schnelle Gerichte','Pasta','Hähnchen','Kartoffeln','Vegetarisch','Auflauf','Reisgerichte','Pfannengerichte'];
- return [...new Set([...tagQueries,...liked,...base])].filter(Boolean);
+function rotateRecommendations(){
+ const n=data.recipes.length;if(!n)return;
+ recommendationOffset=n<=4?0:(recommendationOffset+4)%n;
+ render();
+ if(n<=4)flash('Du hast aktuell nur vier gespeicherte Rezepte. Speichere weitere Gerichte, damit MealMate neue Vorschläge durchtauschen kann.');
 }
-function chefRecommendCard(x){return `<article class="card chef-recommend-card"><div class="chef-recommend-image ${x.image?'has-image':''}" ${x.image?`style="background-image:url('${esc(safeUrl(x.image))}')"`:''}><span>${x.image?'':'🍲'}</span><div class="chef-badge">Chefkoch</div></div><div class="recipe-body"><div class="recipe-title">${esc(x.title)}</div>${x.meta?`<div class="meta"><span class="pill">${esc(x.meta)}</span></div>`:''}<div class="chef-recommend-actions"><button class="secondary" data-chef-save="${esc(x.url)}">♡ Merken</button><button class="secondary" data-chef-plan="${esc(x.url)}">+ Plan</button><button class="secondary" data-chef-open="${esc(x.url)}">Original</button></div></div></article>`}
-async function loadChefRecommendations(next=false){
- if(!normalizeProxy(CHEF_PROXY)||chefRecommendationLoading)return;
- if(next)chefRecommendationPage++;
- chefRecommendationLoading=true;chefRecommendationError='';render();
- try{
-  const queries=tasteQueries();
-  const q1=queries[(chefRecommendationPage*2)%queries.length],q2=queries[(chefRecommendationPage*2+1)%queries.length];
-  const batches=await Promise.all([q1,q2].map(q=>chefSearchItems(q).catch(()=>[])));
-  const savedUrls=new Set(data.recipes.map(r=>r.source?.url).filter(Boolean));
-  const savedTitles=data.recipes.map(r=>r.title.toLowerCase());
-  const seen=new Set(),pool=[];
-  batches.flat().forEach(x=>{
-   if(!x?.url||seen.has(x.url)||savedUrls.has(x.url))return;
-   const exact=savedTitles.some(t=>titleSimilarity(t,x.title)>=.95);
-   if(exact)return;
-   seen.add(x.url);pool.push(x);
-  });
-  // Vary each refresh while preserving relevance from the taste-derived search queries.
-  pool.sort(()=>Math.random()-.5);
-  chefRecommendations=pool.slice(0,4);
-  if(!chefRecommendations.length)throw new Error('Keine Vorschläge gefunden');
- }catch(e){chefRecommendationError='Chefkoch-Empfehlungen konnten gerade nicht geladen werden.'}
- chefRecommendationLoading=false;render();
-}
-function rotateRecommendations(){loadChefRecommendations(true)}
-function home(){
- const fallback=recommendationList();
- const recommendationHtml=chefRecommendationLoading?'<div class="chef-loader recommendation-loader">Passende Chefkoch-Rezepte werden gesucht …</div>':chefRecommendations.length?`<div class="grid">${chefRecommendations.map(chefRecommendCard).join('')}</div>`:chefRecommendationError?`<div class="notice">${esc(chefRecommendationError)}<div class="topgap"><button class="secondary" data-action="newRecommendations">Erneut versuchen</button></div></div>`:`<div class="grid">${fallback.map(recipeCard).join('')}</div>`;
- return `${header()}<main class="content"><section class="hero"><h1>Was kann ich essen?</h1><p>Ich gleiche Vorräte und Geschmack ab und werde mit jeder Bewertung persönlicher.</p></section><div class="learn-card"><b>MealMate lernt mit</b><span>${esc(preferenceSummary())}</span></div><div class="search"><input id="globalSearch" placeholder="Rezepte durchsuchen…" value="${esc(search)}"></div><div class="section-title recommend-head"><h2>Für dich empfohlen</h2><div class="recommend-actions"><button data-action="newRecommendations">↻ Neue Vorschläge</button><button data-action="suggestWeek">Woche planen</button></div></div>${recommendationHtml}<div class="recommend-hint">Die Vorschläge kommen direkt aus Chefkoch. MealMate wählt Suchthemen aus deinen Bewertungen, Favoriten und gekochten Gerichten und variiert sie bei jedem Durchtauschen.</div><div class="section-title"><h2>Favoriten</h2><button data-nav="recipes">Alle</button></div><div class="grid">${data.recipes.filter(r=>r.favorite).slice(0,3).map(recipeCard).join('')||'<div class="empty">Noch keine Favoriten.</div>'}</div></main><button class="fab" data-action="addRecipe">+</button>${nav()}`
-}
+function home(){const possible=recommendationList();return `${header()}<main class="content"><section class="hero"><h1>Was kann ich essen?</h1><p>Ich gleiche Vorräte und Geschmack ab und werde mit jeder Bewertung persönlicher.</p></section><div class="learn-card"><b>MealMate lernt mit</b><span>${esc(preferenceSummary())}</span></div><div class="search"><input id="globalSearch" placeholder="Rezepte durchsuchen…" value="${esc(search)}"></div><div class="section-title recommend-head"><h2>Für dich empfohlen</h2><div class="recommend-actions"><button data-action="newRecommendations">↻ Neue Vorschläge</button><button data-action="suggestWeek">Woche planen</button></div></div><div class="grid">${possible.map(recipeCard).join('')}</div><div class="recommend-hint">Die Reihenfolge berücksichtigt deine Bewertungen, Favoriten, Kochhistorie und Vorräte.</div><div class="section-title"><h2>Favoriten</h2><button data-nav="recipes">Alle</button></div><div class="grid">${data.recipes.filter(r=>r.favorite).slice(0,3).map(recipeCard).join('')||'<div class="empty">Noch keine Favoriten.</div>'}</div></main><button class="fab" data-action="addRecipe">+</button>${nav()}`}
 function chefFeedCard(x){return `<article class="chef-feed-card"><div class="chef-feed-image ${x.image?'has-image':''}" ${x.image?`style="background-image:url('${esc(safeUrl(x.image))}')"`:''}><span>${x.image?'':'🍲'}</span><div class="chef-badge">Chefkoch</div></div><div class="chef-feed-body"><h3>${esc(x.title)}</h3>${x.meta?`<p>${esc(x.meta)}</p>`:''}<div class="chef-feed-actions"><button class="secondary" data-chef-save="${esc(x.url)}">♡ Merken</button><button class="secondary" data-chef-plan="${esc(x.url)}">+ Plan</button><button class="secondary" data-chef-open="${esc(x.url)}">Original</button></div></div></article>`}
 function discoverBody(){const qs=['Schnelle Gerichte','Lasagne','Hähnchen','Pasta','Kartoffeln','Vegetarisch','Auflauf','Pfannkuchen'],proxyReady=!!normalizeProxy(CHEF_PROXY);return `<main class="content discover-content"><section class="hero discover-hero"><h1>Chefkoch entdecken</h1><p>Scrolle direkt in MealMate durch Rezeptvorschläge. Interessante Gerichte kannst du merken oder direkt in deinen Wochenplan übernehmen.</p></section>${!proxyReady?`<div class="notice proxy-notice"><b>Einmalige Einrichtung nötig</b><br>Damit Chefkoch den Abruf auf dem iPhone nicht blockiert, braucht MealMate deinen kostenlosen Cloudflare-Worker.<br><button class="secondary topgap" data-action="settings">Worker-Adresse eintragen</button></div>`:''}<form id="chefFeedSearch" class="search chef-feed-search"><input name="q" id="chefSearch" placeholder="z. B. Lasagne, Hähnchen, schnell…" value="${esc(chefQuery)}"><button class="primary" ${proxyReady?'':'disabled'}>Suchen</button></form><div class="chips wrap">${qs.map(q=>`<button class="chip ${chefQuery===q?'active':''}" data-chef-feed="${esc(q)}" ${proxyReady?'':'disabled'}>${esc(q)}</button>`).join('')}</div><div class="section-title"><h2>Rezepte</h2><button data-action="reloadChefFeed" ${proxyReady?'':'disabled'}>↻ Neu laden</button></div>${!proxyReady?'<div class="chef-loader">Nach der Worker-Einrichtung erscheinen hier die Chefkoch-Rezepte.</div>':chefLoading?'<div class="chef-loader">Chefkoch-Rezepte werden geladen …</div>':chefError?`<div class="notice">${esc(chefError)}<br><button class="secondary topgap" data-action="openChefSearch">Suche bei Chefkoch öffnen ↗</button></div>`:`<div class="chef-feed">${chefFeed.map(chefFeedCard).join('')||'<div class="chef-loader">Feed wird vorbereitet …</div>'}</div>`}<div class="notice">Die Rezeptdetails bleiben bei Chefkoch. „Merken“ importiert die strukturierten Rezeptdaten in deine private MealMate-Sammlung, soweit Chefkoch sie technisch bereitstellt.</div><div class="section-title"><h2>Deine persönlichen Empfehlungen</h2></div><div class="grid">${[...data.recipes].sort((a,b)=>scoreRecipe(b)-scoreRecipe(a)).slice(0,3).map(recipeCard).join('')}</div></main>`}
 
@@ -249,6 +213,19 @@ async function chefSearchItems(q){
  });
  return items;
 }
+async function ensureRecommendationImages(){
+ if(view!=='home'||!normalizeProxy(CHEF_PROXY))return;
+ const targets=recommendationList().filter(r=>!safeUrl(r.image||'')&&!recommendationImageLoading.has(r.id));
+ for(const r of targets){
+  recommendationImageLoading.add(r.id);
+  try{
+   const items=await chefSearchItems(r.title);
+   const best=items.map(x=>({...x,sim:titleSimilarity(r.title,x.title)})).sort((a,b)=>b.sim-a.sim)[0];
+   if(best?.image&&best.sim>=.34){r.image=best.image;store.set(data);if(view==='home')render()}
+  }catch{}
+  finally{recommendationImageLoading.delete(r.id)}
+ }
+}
 function chefUrl(q){return `https://www.chefkoch.de/rs/s0/${encodeURIComponent(q)}/Rezepte.html`}
 function normalizeProxy(v=''){try{const u=new URL(String(v).trim());if(u.protocol!=='https:')return '';return u.origin+u.pathname.replace(/\/$/,'')}catch{return ''}}
 function chefProxyUrl(target){const base=normalizeProxy(CHEF_PROXY);if(!base)throw new Error('Cloudflare-Worker ist noch nicht eingerichtet.');return `${base}/proxy?url=${encodeURIComponent(target)}`}
@@ -313,7 +290,7 @@ function bind(){
  $$('[data-plan]').forEach(b=>{b.onclick=()=>{if(planSwipeConsumed){planSwipeConsumed=false;return}if(planDragMoved){planDragMoved=false;return}modal=planModal(b.dataset.plan,b.dataset.meal);render()};b.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();modal=planModal(b.dataset.plan,b.dataset.meal);render()}}});
  bindPlanDragDrop();
  bindPlanSwipeDelete();
- if(view==='home'&&normalizeProxy(CHEF_PROXY)&&!chefRecommendationLoading&&!chefRecommendations.length&&!chefRecommendationError)setTimeout(()=>loadChefRecommendations(false),0);
+ if(view==='home')setTimeout(ensureRecommendationImages,0);
  $$('[data-plan-recipe]').forEach(b=>b.onclick=()=>{data.planner[b.dataset.date]??=emptyMealPlan();data.planner[b.dataset.date][b.dataset.meal]=b.dataset.planRecipe||null;modal=null;save()});
  $$('[data-rate]').forEach(b=>b.onclick=()=>{const r=data.recipes.find(x=>x.id===b.dataset.id);r.rating=+b.dataset.rate;data.taste.ratings=(data.taste.ratings||0)+1;modal=recipeModal(r);save()});
  $$('[data-chef]').forEach(b=>b.onclick=()=>window.open(chefUrl(b.dataset.chef),'_blank','noopener'));

@@ -142,14 +142,3 @@ html[data-theme="dark"] .chef-badge{background:rgba(27,34,28,.92);color:#b8e4c5}
 html[data-theme="dark"] .toast{background:#eef3ef;color:#111612}
 html[data-theme="dark"] .hero{box-shadow:0 10px 30px rgba(0,0,0,.35)}
 @media(max-width:390px){.theme-picker button{font-size:11px;padding-inline:3px}}
-
-/* v15: Chefkoch recommendations on Start; image behavior restored to v11 */
-.chef-recommend-card{overflow:hidden}
-.chef-recommend-image{height:118px;position:relative;display:flex;align-items:flex-end;padding:12px;background:linear-gradient(140deg,#e8efe9,#f3e6d4);background-size:cover;background-position:center;font-size:38px}
-.chef-recommend-image.has-image span{display:none}
-.chef-recommend-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:12px}
-.chef-recommend-actions button{min-height:38px;padding:8px 6px;font-size:11px}
-.chef-recommend-actions button:last-child{grid-column:1/-1}
-.recommendation-loader{grid-column:1/-1}
-html[data-theme="dark"] .chef-recommend-image{background:linear-gradient(140deg,#253229,#352e24)}
-@media(min-width:620px){.chef-recommend-image{height:135px}}

@@ -19,9 +19,3 @@ Ersetze die bisherigen MealMate-Dateien in deinem Repository durch den Inhalt de
 ## v12
 - Wochenplan: Wischen nach links zeigt erst die rote Aktion „Löschen“. Erst ein Tipp darauf entfernt die Mahlzeit.
 - Startseite: Empfehlungen ohne Bild versuchen automatisch ein passendes Rezeptbild über den eingerichteten Chefkoch-Worker zu laden.
-
-
-## v15
-- Bilddarstellung der Rezeptkarten wurde auf das Verhalten von v11 zurückgesetzt.
-- Die Startseite bezieht persönliche Empfehlungen direkt aus Chefkoch und lernt Suchthemen aus Bewertungen, Favoriten und Kochhistorie.
-- „Neue Vorschläge“ lädt neue Chefkoch-Rezepte statt nur gespeicherte Rezepte durchzutauschen.
