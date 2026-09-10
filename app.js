@@ -2,7 +2,7 @@
 
 const CHEF_PROXY = 'https://mealmate.grxq8hqb8r.workers.dev';
 const STORE_KEY = 'mealmate_data';
-const APP_VERSION = 101;
+const APP_VERSION = 102;
 const MEALS = [
   ['breakfast','Frühstück','☀️'],
   ['lunch','Mittagessen','🍽️'],
@@ -68,8 +68,8 @@ function normalizeIngredient(x){
   return {name:String(x?.name||'Zutat').trim(), quantity:parseNum(x?.quantity), unit:UNITS.includes(x?.unit)?x.unit:(x?.unit||'')};
 }
 function normalizePantryItem(x){
-  if(typeof x === 'string') return {id:uid(),name:x,quantity:1,unit:'Stück'};
-  return {id:x?.id||uid(),name:String(x?.name||'').trim(),quantity:parseNum(x?.quantity),unit:UNITS.includes(x?.unit)?x.unit:(x?.unit||'Stück')};
+  if(typeof x === 'string') return {id:uid(),name:x,quantity:1,unit:'Stück',barcode:'',image:''};
+  return {id:x?.id||uid(),name:String(x?.name||'').trim(),quantity:parseNum(x?.quantity),unit:UNITS.includes(x?.unit)?x.unit:(x?.unit||'Stück'),barcode:String(x?.barcode||''),image:String(x?.image||'')};
 }
 function normalizeShoppingItem(x){
   if(typeof x === 'string') return {id:uid(),name:x,quantity:1,unit:'Stück',done:false};
@@ -124,6 +124,8 @@ let recError='';
 let recCycle=0;
 let modal=null;
 let toastTimer=null;
+let barcodeScanner=null;
+let barcodeScanBusy=false;
 
 function applyTheme(){
   const pref=data.settings.theme||'system';
@@ -245,7 +247,7 @@ function shoppingHtml(){
   return `${sorted.length?sorted.map(x=>`<div class="list-card ${x.done?'done':''}"><button class="check ${x.done?'checked':''}" data-check-shopping="${x.id}">${x.done?'✓':''}</button><div class="list-main"><b>${esc(x.name)}</b><small>${x.done?'Erledigt':'Noch einkaufen'}</small></div><span class="qty-badge">${esc(fmtQty(x.quantity,x.unit))}</span>${x.done?`<button class="mini-icon" data-move-pantry="${x.id}" title="In Vorrat">＋🥫</button>`:''}<button class="mini-icon" data-remove-shopping="${x.id}">✕</button></div>`).join(''):`<div class="empty-state"><div class="big">🛒</div>Deine Einkaufsliste ist leer.</div>`}<button class="fab" data-action="addShopping">＋</button>`;
 }
 function pantryHtml(){
-  return `${data.pantry.length?data.pantry.map(x=>`<div class="list-card"><div class="list-main"><b>${esc(x.name)}</b><small>Im Vorrat</small></div><span class="qty-badge">${esc(fmtQty(x.quantity,x.unit))}</span><button class="mini-icon" data-remove-pantry="${x.id}">✕</button></div>`).join(''):`<div class="empty-state"><div class="big">🥫</div>Noch keine Vorräte eingetragen.</div>`}<button class="fab" data-action="addPantry">＋</button>`;
+  return `<div class="pantry-tools"><button class="secondary scan-stock-btn" data-action="scanBarcode">▣ Strichcode scannen</button></div>${data.pantry.length?data.pantry.map(x=>`<div class="list-card">${x.image?`<img class="stock-thumb" src="${esc(x.image)}" alt="">`:''}<div class="list-main"><b>${esc(x.name)}</b><small>${x.barcode?`Strichcode ${esc(x.barcode)} · `:''}Im Vorrat</small></div><span class="qty-badge">${esc(fmtQty(x.quantity,x.unit))}</span><button class="mini-icon" data-remove-pantry="${x.id}">✕</button></div>`).join(''):`<div class="empty-state"><div class="big">🥫</div>Noch keine Vorräte eingetragen.<br><br>Scanne einen Produkt-Strichcode oder füge etwas manuell hinzu.</div>`}<button class="fab" data-action="addPantry">＋</button>`;
 }
 
 function settingsModal(){
@@ -269,6 +271,77 @@ function addItemModal(kind){
   const title=kind==='pantry'?'Vorrat hinzufügen':'Zur Einkaufsliste';
   return `<div class="modal-back"><section class="modal"><div class="modal-head"><h2>${title}</h2><button class="close" data-close>×</button></div><form id="itemForm" data-kind="${kind}" class="form-grid"><input class="input" name="name" placeholder="z. B. Milch" required><div class="form-row"><input class="input" name="quantity" inputmode="decimal" placeholder="Menge" required><select class="input" name="unit">${UNITS.map(u=>`<option>${u}</option>`).join('')}</select><button class="primary">Speichern</button></div></form></section></div>`;
 }
+
+function barcodeScannerModal(message='Richte die Kamera auf den Strichcode des Produkts.'){
+  return `<div class="modal-back"><section class="modal barcode-modal"><div class="modal-head"><h2>Strichcode scannen</h2><button class="close" data-close>×</button></div><p class="modal-hint">${esc(message)}</p><div id="barcode-reader" class="barcode-reader"><div class="scanner-placeholder">📷<br><small>Kamera wird gestartet …</small></div></div><div class="barcode-guide"><span></span></div><div class="detail-block"><h3>Oder Nummer eingeben</h3><form id="barcodeManualForm" class="search-row"><input class="input" name="barcode" inputmode="numeric" autocomplete="off" placeholder="EAN / UPC" required><button class="primary">Suchen</button></form></div></section></div>`;
+}
+function parsePackageQuantity(product){
+  const raw=String(product?.quantity||'').trim();
+  let m=raw.match(/([\d.,]+)\s*(kg|g|ml|l)\b/i);
+  if(m){let q=parseNum(m[1]),u=m[2].toLowerCase();return {quantity:q||1,unit:u};}
+  const q=parseNum(product?.product_quantity);
+  let u=String(product?.product_quantity_unit||'').toLowerCase();
+  if(q&&['kg','g','ml','l'].includes(u))return {quantity:q,unit:u};
+  return {quantity:1,unit:'Stück'};
+}
+function barcodeProductModal(barcode,product=null,error=''){
+  const qty=parsePackageQuantity(product||{});
+  const name=(product?.product_name_de||product?.product_name||product?.product_name_en||'').trim();
+  const brand=String(product?.brands||'').split(',')[0].trim();
+  const image=product?.image_front_small_url||product?.image_front_url||'';
+  return `<div class="modal-back"><section class="modal"><div class="modal-head"><h2>${product?'Produkt gefunden':'Produkt eintragen'}</h2><button class="close" data-close>×</button></div>${error?`<div class="notice">${esc(error)}</div>`:''}${image?`<div class="barcode-product-head"><img src="${esc(image)}" alt=""><div><b>${esc(name||'Unbekanntes Produkt')}</b>${brand?`<small>${esc(brand)}</small>`:''}</div></div>`:''}<form id="barcodePantryForm" class="form-grid" data-barcode="${esc(barcode)}" data-image="${esc(image)}"><label class="field-label">Produktname</label><input class="input" name="name" value="${esc(name||brand)}" placeholder="Produktname" required><label class="field-label">Menge im Vorrat</label><div class="form-row barcode-qty-row"><input class="input" name="quantity" inputmode="decimal" value="${esc(qty.quantity)}" required><select class="input" name="unit">${UNITS.map(u=>`<option ${u===qty.unit?'selected':''}>${u}</option>`).join('')}</select><button class="primary">Hinzufügen</button></div><div class="barcode-number">Strichcode: ${esc(barcode)}</div></form></section></div>`;
+}
+async function stopBarcodeScanner(){
+  const scanner=barcodeScanner; barcodeScanner=null; barcodeScanBusy=false;
+  if(scanner){try{await scanner.stop();}catch{} try{await scanner.clear();}catch{}}
+}
+async function lookupBarcode(barcode){
+  barcode=String(barcode||'').replace(/\D/g,'');
+  if(!barcode)return;
+  await stopBarcodeScanner();
+  modal=`<div class="modal-back"><section class="modal"><div class="modal-head"><h2>Produkt suchen</h2><button class="close" data-close>×</button></div><div class="loader">Strichcode ${esc(barcode)} wird gesucht …</div></section></div>`;render();
+  try{
+    const fields='code,product_name,product_name_de,product_name_en,brands,quantity,product_quantity,product_quantity_unit,image_front_small_url,image_front_url';
+    const res=await fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json?fields=${fields}`,{headers:{Accept:'application/json'}});
+    if(!res.ok)throw new Error();
+    const json=await res.json();
+    if(json.status===1&&json.product) modal=barcodeProductModal(barcode,json.product);
+    else modal=barcodeProductModal(barcode,null,'Das Produkt wurde nicht in der Produktdatenbank gefunden. Du kannst den Namen trotzdem selbst eintragen.');
+  }catch{
+    modal=barcodeProductModal(barcode,null,'Die Produktdatenbank ist gerade nicht erreichbar. Du kannst das Produkt trotzdem manuell eintragen.');
+  }
+  render();
+}
+async function startBarcodeScanner(){
+  const el=$('#barcode-reader'); if(!el)return;
+  if(typeof Html5Qrcode==='undefined'){
+    el.innerHTML='<div class="notice">Der Kamera-Scanner konnte nicht geladen werden. Du kannst den Strichcode unten manuell eingeben.</div>';
+    return;
+  }
+  try{
+    const formats=(window.Html5QrcodeSupportedFormats?[
+      Html5QrcodeSupportedFormats.EAN_13,Html5QrcodeSupportedFormats.EAN_8,
+      Html5QrcodeSupportedFormats.UPC_A,Html5QrcodeSupportedFormats.UPC_E,
+      Html5QrcodeSupportedFormats.CODE_128
+    ]:undefined);
+    barcodeScanner=new Html5Qrcode('barcode-reader',formats?{formatsToSupport:formats,verbose:false}:{verbose:false});
+    const qrbox=(w,h)=>({width:Math.min(Math.floor(w*.86),360),height:Math.min(Math.floor(h*.34),150)});
+    await barcodeScanner.start({facingMode:'environment'},{fps:12,qrbox,aspectRatio:1.55},async decoded=>{
+      if(barcodeScanBusy)return; barcodeScanBusy=true; try{navigator.vibrate?.(20);}catch{} await lookupBarcode(decoded);
+    },()=>{});
+  }catch(e){
+    barcodeScanner=null;
+    const target=$('#barcode-reader');if(target)target.innerHTML='<div class="notice">Die Kamera konnte nicht geöffnet werden. Erlaube MealMate den Kamerazugriff oder gib den Strichcode unten ein.</div>';
+  }
+}
+function addPantryProduct(item){
+  const name=String(item.name||'').trim(),quantity=parseNum(item.quantity),unit=String(item.unit||'Stück'); if(!name||!quantity)return false;
+  const existing=data.pantry.find(x=>x.name.toLowerCase()===name.toLowerCase()&&x.unit===unit);
+  if(existing){existing.quantity+=quantity;if(item.barcode&&!existing.barcode)existing.barcode=item.barcode;if(item.image&&!existing.image)existing.image=item.image;}
+  else data.pantry.push({id:uid(),name,quantity,unit,barcode:item.barcode||'',image:item.image||''});
+  return true;
+}
+
 function addRecipeModal(){
   return `<div class="modal-back"><section class="modal"><div class="modal-head"><h2>Rezept hinzufügen</h2><button class="close" data-close>×</button></div><form id="recipeForm" class="form-grid"><input class="input" name="title" placeholder="Name des Rezepts" required><input class="input" name="image" placeholder="Bild-URL (optional)"><input class="input" name="tags" placeholder="Tags, z. B. Pasta, schnell"><textarea class="input" name="ingredients" rows="6" placeholder="Zutaten, eine pro Zeile\nz. B. 250 g Pasta"></textarea><textarea class="input" name="steps" rows="6" placeholder="Zubereitung, ein Schritt pro Zeile"></textarea><button class="primary">Rezept speichern</button></form><div class="detail-block"><h3>Oder von Chefkoch importieren</h3><form id="importForm" class="search-row"><input class="input" name="url" type="url" placeholder="Chefkoch-Rezeptlink" required><button class="primary">Importieren</button></form></div></section></div>`;
 }
@@ -425,11 +498,11 @@ function render(){
 }
 
 function bind(){
-  $$('[data-nav]').forEach(b=>b.onclick=()=>{view=b.dataset.nav;modal=null;render();});
+  $$('[data-nav]').forEach(b=>b.onclick=async()=>{await stopBarcodeScanner();view=b.dataset.nav;modal=null;render();});
   $$('[data-recipe-tab]').forEach(b=>b.onclick=()=>{recipeTab=b.dataset.recipeTab;render();});
   $$('[data-stock-tab]').forEach(b=>b.onclick=()=>{stockTab=b.dataset.stockTab;render();});
   $$('[data-filter]').forEach(b=>b.onclick=()=>{recipeFilter=b.dataset.filter;render();});
-  $$('[data-close]').forEach(b=>b.onclick=()=>{modal=null;render();});
+  $$('[data-close]').forEach(b=>b.onclick=async()=>{await stopBarcodeScanner();modal=null;render();});
   $$('[data-theme-choice]').forEach(b=>b.onclick=()=>{data.settings.theme=b.dataset.themeChoice;save(false);applyTheme();modal=settingsModal();render();});
   $$('[data-open-recipe]').forEach(card=>card.onclick=e=>{if(e.target.closest('button'))return;modal=recipeModal(recipeById(card.dataset.openRecipe));render();});
   $$('[data-action]').forEach(b=>b.onclick=e=>{e.stopPropagation();action(b.dataset.action,b.dataset.id,b.dataset.url);});
@@ -446,6 +519,8 @@ function bind(){
   const rs=$('#recipeSearch');if(rs)rs.oninput=e=>{search=e.target.value;render();setTimeout(()=>$('#recipeSearch')?.focus(),0)};
   const ef=$('#exploreForm');if(ef)ef.onsubmit=e=>{e.preventDefault();loadExplore(new FormData(ef).get('q'));};
   const itemForm=$('#itemForm');if(itemForm)itemForm.onsubmit=e=>{e.preventDefault();const fd=new FormData(itemForm),x={id:uid(),name:String(fd.get('name')).trim(),quantity:parseNum(fd.get('quantity')),unit:String(fd.get('unit'))};if(itemForm.dataset.kind==='pantry')data.pantry.push(x);else data.shopping.push({...x,done:false});modal=null;save();};
+  const bmf=$('#barcodeManualForm');if(bmf)bmf.onsubmit=e=>{e.preventDefault();lookupBarcode(new FormData(bmf).get('barcode'));};
+  const bpf=$('#barcodePantryForm');if(bpf)bpf.onsubmit=e=>{e.preventDefault();const fd=new FormData(bpf);if(addPantryProduct({name:fd.get('name'),quantity:fd.get('quantity'),unit:fd.get('unit'),barcode:bpf.dataset.barcode,image:bpf.dataset.image})){modal=null;save();flash('Produkt wurde zum Vorrat hinzugefügt.');}};
   const rf=$('#recipeForm');if(rf)rf.onsubmit=e=>{e.preventDefault();const fd=new FormData(rf);const r={id:uid(),title:String(fd.get('title')).trim(),emoji:'🍽️',image:String(fd.get('image')).trim(),time:30,servings:2,tags:String(fd.get('tags')).split(',').map(x=>x.trim()).filter(Boolean),ingredients:String(fd.get('ingredients')).split('\n').map(parseIngredientText).filter(x=>x.name),steps:String(fd.get('steps')).split('\n').map(x=>x.trim()).filter(Boolean),nutrition:{},favorite:false,rating:0,cookedCount:0,lastCooked:null,source:null};data.recipes.unshift(r);modal=null;save();};
   const im=$('#importForm');if(im)im.onsubmit=e=>{e.preventDefault();const url=String(new FormData(im).get('url')).trim();importChef(url,false);};
   bindMealGestures();
@@ -465,6 +540,7 @@ function action(a,id,url){
   if(a==='planToShopping'){plannerToShopping();return;}
   if(a==='addShopping'){modal=addItemModal('shopping');render();return;}
   if(a==='addPantry'){modal=addItemModal('pantry');render();return;}
+  if(a==='scanBarcode'){modal=barcodeScannerModal();render();setTimeout(startBarcodeScanner,120);return;}
   if(a==='addRecipe'){modal=addRecipeModal();render();return;}
   if(a==='testWorker'){fetch(`${CHEF_PROXY}/health`).then(r=>r.json()).then(j=>flash(j.ok?'Worker verbunden.':'Worker antwortet unerwartet.')).catch(()=>flash('Worker nicht erreichbar.'));return;}
 }
