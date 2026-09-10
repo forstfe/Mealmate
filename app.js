@@ -234,7 +234,7 @@ function mealGroupHtml(day,meal,label,icon,ids){
   const content=ids.length
     ? `${cards}<div class="meal-slot empty-slot meal-add-target" data-add-slot="${day}|${meal}">＋ Zu ${label} hinzufügen</div>`
     : `<div class="meal-slot empty-slot" data-empty-slot="${day}|${meal}">＋ Gericht wählen</div>`;
-  return `<div class="meal-row"><div class="meal-label">${icon} ${label}</div><div class="meal-stack">${content}</div></div>`;
+  return `<div class="meal-row"><div class="meal-label">${icon} ${label}</div><div class="meal-stack" data-drop-slot="${day}|${meal}">${content}</div></div>`;
 }
 
 function shoppingView(){
@@ -470,65 +470,145 @@ function action(a,id,url){
 }
 
 function bindMealGestures(){
-  const HOLD_MS=420;
-  const MOVE_CANCEL=10;
-  const SWIPE_OPEN=35;
+  const HOLD_MS=320;
+  const PRESS_FEEDBACK_MS=110;
+  const MOVE_TOLERANCE=20;
+  const SWIPE_OPEN=42;
   const DELETE_WIDTH=88;
+  const EDGE_SCROLL=105;
+  const MAX_SCROLL_SPEED=14;
 
   $$('.meal-slot[data-slot]').forEach(slot=>{
     let sx=0,sy=0,dx=0,dy=0,pointerId=null;
-    let holdTimer=null,dragging=false,swiping=false,cancelled=false,ghost=null,source=null;
+    let holdTimer=null,pressTimer=null,dragging=false,swiping=false,cancelled=false,ghost=null,source=null;
+    let lastX=0,lastY=0,scrollRaf=0;
 
-    const clearHold=()=>{ if(holdTimer){ clearTimeout(holdTimer); holdTimer=null; } };
-    const clearTargets=()=>$$('.drag-over').forEach(x=>x.classList.remove('drag-over'));
-    const targetAt=(x,y)=>document.elementFromPoint(x,y)?.closest('[data-add-slot],[data-empty-slot]')||null;
-    const moveGhost=(x,y)=>{ if(ghost){ ghost.style.left=`${x}px`; ghost.style.top=`${y}px`; } };
+    const clearTimers=()=>{
+      if(holdTimer){clearTimeout(holdTimer);holdTimer=null;}
+      if(pressTimer){clearTimeout(pressTimer);pressTimer=null;}
+      slot.classList.remove('pressing');
+    };
+    const clearTargets=()=>$$('.drag-over,.drag-zone-active').forEach(x=>x.classList.remove('drag-over','drag-zone-active'));
+    const targetAt=(x,y)=>{
+      const el=document.elementFromPoint(x,y);
+      return el?.closest('.meal-stack[data-drop-slot]')||null;
+    };
+    const moveGhost=(x,y)=>{
+      if(!ghost)return;
+      ghost.style.left=`${x}px`;
+      ghost.style.top=`${Math.max(72,y-64)}px`;
+    };
+    const updateTarget=(x,y)=>{
+      clearTargets();
+      $$('.meal-stack[data-drop-slot]').forEach(z=>z.classList.add('drag-zone-active'));
+      const target=targetAt(x,y);
+      if(target)target.classList.add('drag-over');
+      return target;
+    };
+    const autoScroll=()=>{
+      scrollRaf=0;
+      if(!dragging)return;
+      const h=window.innerHeight;
+      let speed=0;
+      if(lastY<EDGE_SCROLL) speed=-MAX_SCROLL_SPEED*(1-lastY/EDGE_SCROLL);
+      else if(lastY>h-EDGE_SCROLL) speed=MAX_SCROLL_SPEED*(1-(h-lastY)/EDGE_SCROLL);
+      if(Math.abs(speed)>.2){
+        window.scrollBy(0,speed);
+        updateTarget(lastX,lastY);
+        scrollRaf=requestAnimationFrame(autoScroll);
+      }
+    };
+    const scheduleAutoScroll=()=>{
+      if(scrollRaf)return;
+      scrollRaf=requestAnimationFrame(autoScroll);
+    };
+    const stopAutoScroll=()=>{if(scrollRaf){cancelAnimationFrame(scrollRaf);scrollRaf=0;}};
+
     const startDrag=(x,y)=>{
       if(cancelled||swiping||dragging)return;
+      clearTimers();
       dragging=true; source=slot.dataset.slot;
       slot.classList.remove('revealed'); slot.style.transform=''; slot.style.transition='';
       slot.classList.add('dragging'); document.body.classList.add('plan-dragging');
-      ghost=slot.cloneNode(true); ghost.classList.remove('dragging','revealed','drag-over'); ghost.classList.add('drag-ghost');
-      ghost.removeAttribute('data-slot'); document.body.appendChild(ghost); moveGhost(x,y);
+      const rect=slot.getBoundingClientRect();
+      ghost=slot.cloneNode(true);
+      ghost.classList.remove('dragging','revealed','drag-over','pressing');
+      ghost.classList.add('drag-ghost');
+      ghost.removeAttribute('data-slot');
+      ghost.style.width=`${Math.min(rect.width,window.innerWidth-24)}px`;
+      document.body.appendChild(ghost);
+      moveGhost(x,y); updateTarget(x,y);
+      try{navigator.vibrate?.(18);}catch{}
     };
     const stopDrag=(e,commit=true)=>{
-      clearHold(); if(!dragging)return;
-      const target=targetAt(e.clientX,e.clientY); const dest=target?.dataset.addSlot||target?.dataset.emptySlot;
-      clearTargets(); ghost?.remove(); ghost=null; slot.classList.remove('dragging'); document.body.classList.remove('plan-dragging'); dragging=false;
-      if(commit&&dest&&source) movePlanItem(source,dest);
+      clearTimers();
+      if(!dragging)return;
+      const target=targetAt(e.clientX,e.clientY);
+      const dest=target?.dataset.dropSlot;
+      stopAutoScroll(); clearTargets();
+      ghost?.remove(); ghost=null;
+      slot.classList.remove('dragging'); document.body.classList.remove('plan-dragging'); dragging=false;
+      if(commit&&dest&&source){
+        try{navigator.vibrate?.(10);}catch{}
+        movePlanItem(source,dest);
+      }
       source=null;
     };
 
     slot.addEventListener('contextmenu',e=>e.preventDefault());
     slot.addEventListener('pointerdown',e=>{
-      if(e.button!==undefined&&e.button!==0)return; if(e.target.closest('button'))return;
-      sx=e.clientX; sy=e.clientY; dx=dy=0; pointerId=e.pointerId; cancelled=false; swiping=false; dragging=false;
-      slot.setPointerCapture?.(pointerId); holdTimer=setTimeout(()=>startDrag(sx,sy),HOLD_MS);
+      if(e.button!==undefined&&e.button!==0)return;
+      if(e.target.closest('button'))return;
+      sx=e.clientX; sy=e.clientY; lastX=sx; lastY=sy; dx=dy=0; pointerId=e.pointerId;
+      cancelled=false; swiping=false; dragging=false;
+      slot.setPointerCapture?.(pointerId);
+      pressTimer=setTimeout(()=>{if(!cancelled&&!swiping)slot.classList.add('pressing');},PRESS_FEEDBACK_MS);
+      holdTimer=setTimeout(()=>startDrag(sx,sy),HOLD_MS);
     });
     slot.addEventListener('pointermove',e=>{
-      if(pointerId===null||e.pointerId!==pointerId)return; dx=e.clientX-sx; dy=e.clientY-sy;
+      if(pointerId===null||e.pointerId!==pointerId)return;
+      dx=e.clientX-sx; dy=e.clientY-sy; lastX=e.clientX; lastY=e.clientY;
       if(dragging){
-        e.preventDefault(); moveGhost(e.clientX,e.clientY); clearTargets();
-        const target=targetAt(e.clientX,e.clientY); if(target)target.classList.add('drag-over'); return;
+        e.preventDefault();
+        moveGhost(lastX,lastY); updateTarget(lastX,lastY); scheduleAutoScroll();
+        return;
       }
-      const moved=Math.hypot(dx,dy);
-      if(moved>MOVE_CANCEL){ clearHold(); if(Math.abs(dy)>Math.abs(dx)+12){cancelled=true;return;} if(Math.abs(dx)>Math.abs(dy))swiping=true; }
+      const ax=Math.abs(dx), ay=Math.abs(dy), moved=Math.hypot(dx,dy);
+      if(moved>MOVE_TOLERANCE){
+        clearTimers();
+        if(ay>ax+10){cancelled=true;return;}
+        if(ax>ay+4)swiping=true;
+      }
       if(swiping){
-        if(dx<0){ e.preventDefault(); slot.style.transition='none'; slot.style.transform=`translateX(${Math.max(-DELETE_WIDTH,dx)}px)`; }
-        else if(slot.classList.contains('revealed')){ e.preventDefault(); slot.style.transition='none'; slot.style.transform=`translateX(${Math.min(0,-DELETE_WIDTH+dx)}px)`; }
+        if(dx<0){
+          e.preventDefault(); slot.style.transition='none'; slot.style.transform=`translateX(${Math.max(-DELETE_WIDTH,dx)}px)`;
+        }else if(slot.classList.contains('revealed')){
+          e.preventDefault(); slot.style.transition='none'; slot.style.transform=`translateX(${Math.min(0,-DELETE_WIDTH+dx)}px)`;
+        }
       }
     });
     const finish=e=>{
-      if(pointerId===null||(e.pointerId!==undefined&&e.pointerId!==pointerId))return; clearHold();
+      if(pointerId===null||(e.pointerId!==undefined&&e.pointerId!==pointerId))return;
+      clearTimers();
       if(dragging)stopDrag(e,true);
-      else if(swiping){ slot.style.transition=''; slot.style.transform=''; if(dx<-SWIPE_OPEN)slot.classList.add('revealed'); else if(dx>30)slot.classList.remove('revealed'); }
+      else if(swiping){
+        slot.style.transition=''; slot.style.transform='';
+        if(dx<-SWIPE_OPEN)slot.classList.add('revealed'); else if(dx>30)slot.classList.remove('revealed');
+      }
       pointerId=null; swiping=false; cancelled=false; dx=dy=0;
     };
     slot.addEventListener('pointerup',finish);
-    slot.addEventListener('pointercancel',e=>{ clearHold(); if(dragging)stopDrag(e,false); slot.style.transition=''; slot.style.transform=''; pointerId=null; swiping=false; cancelled=false; dx=dy=0; });
+    slot.addEventListener('pointercancel',e=>{
+      clearTimers(); stopAutoScroll();
+      if(dragging)stopDrag(e,false);
+      slot.style.transition=''; slot.style.transform=''; slot.classList.remove('pressing');
+      pointerId=null; swiping=false; cancelled=false; dx=dy=0;
+    });
   });
 
-  document.addEventListener('pointerdown',e=>{ if(!e.target.closest('.swipe-shell'))$$('.meal-slot.revealed').forEach(x=>x.classList.remove('revealed')); });
+  document.addEventListener('pointerdown',e=>{
+    if(!e.target.closest('.swipe-shell'))$$('.meal-slot.revealed').forEach(x=>x.classList.remove('revealed'));
+  });
 }
 function movePlanItem(source,dest){
   const[sd,sm,siRaw]=source.split('|'),[dd,dm]=dest.split('|'); const si=+siRaw;

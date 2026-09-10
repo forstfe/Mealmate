@@ -37,3 +37,12 @@ a{color:inherit;text-decoration:none}
 .plan-dragging{user-select:none;-webkit-user-select:none;overflow:hidden}
 .meal-slot.dragging{opacity:.35}
 .drag-ghost{position:fixed!important;z-index:9999!important;pointer-events:none!important;width:min(70vw,420px);transform:translate(-50%,-50%) scale(1.03)!important;box-shadow:0 14px 38px rgba(0,0,0,.24);opacity:.96!important;transition:none!important}
+
+/* Improved touch drag & drop */
+.meal-slot.pressing{transform:scale(.985);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 35%,transparent);transition:transform .12s ease,box-shadow .12s ease}
+.plan-dragging{user-select:none;-webkit-user-select:none}
+.plan-dragging .meal-stack[data-drop-slot]{border-radius:18px;transition:background .12s ease,outline-color .12s ease,transform .12s ease;outline:1px dashed transparent;outline-offset:3px}
+.plan-dragging .meal-stack.drag-zone-active{outline-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+.plan-dragging .meal-stack.drag-over{background:color-mix(in srgb,var(--accent2) 72%,transparent);outline:3px solid var(--accent);outline-offset:3px;transform:scale(1.012)}
+.plan-dragging .meal-stack.drag-over .meal-add-target{background:var(--accent);color:var(--bg);border-color:var(--accent)}
+.drag-ghost{position:fixed!important;z-index:9999!important;pointer-events:none!important;transform:translate(-50%,-50%) scale(1.025)!important;box-shadow:0 16px 44px rgba(0,0,0,.28);opacity:.97!important;transition:none!important}
