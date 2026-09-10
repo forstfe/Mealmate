@@ -126,6 +126,7 @@ let modal=null;
 let toastTimer=null;
 let barcodeScanner=null;
 let barcodeScanBusy=false;
+let stockFabOpen=false;
 
 function applyTheme(){
   const pref=data.settings.theme||'system';
@@ -247,7 +248,7 @@ function shoppingHtml(){
   return `${sorted.length?sorted.map(x=>`<div class="list-card ${x.done?'done':''}"><button class="check ${x.done?'checked':''}" data-check-shopping="${x.id}">${x.done?'✓':''}</button><div class="list-main"><b>${esc(x.name)}</b><small>${x.done?'Erledigt':'Noch einkaufen'}</small></div><span class="qty-badge">${esc(fmtQty(x.quantity,x.unit))}</span>${x.done?`<button class="mini-icon" data-move-pantry="${x.id}" title="In Vorrat">＋🥫</button>`:''}<button class="mini-icon" data-remove-shopping="${x.id}">✕</button></div>`).join(''):`<div class="empty-state"><div class="big">🛒</div>Deine Einkaufsliste ist leer.</div>`}<button class="fab" data-action="addShopping">＋</button>`;
 }
 function pantryHtml(){
-  return `<div class="pantry-tools"><button class="secondary scan-stock-btn" data-action="scanBarcode">▣ Strichcode scannen</button></div>${data.pantry.length?data.pantry.map(x=>`<div class="list-card">${x.image?`<img class="stock-thumb" src="${esc(x.image)}" alt="">`:''}<div class="list-main"><b>${esc(x.name)}</b><small>${x.barcode?`Strichcode ${esc(x.barcode)} · `:''}Im Vorrat</small></div><span class="qty-badge">${esc(fmtQty(x.quantity,x.unit))}</span><button class="mini-icon" data-remove-pantry="${x.id}">✕</button></div>`).join(''):`<div class="empty-state"><div class="big">🥫</div>Noch keine Vorräte eingetragen.<br><br>Scanne einen Produkt-Strichcode oder füge etwas manuell hinzu.</div>`}<button class="fab" data-action="addPantry">＋</button>`;
+  return `${data.pantry.length?data.pantry.map(x=>`<div class="list-card">${x.image?`<img class="stock-thumb" src="${esc(x.image)}" alt="">`:''}<div class="list-main"><b>${esc(x.name)}</b><small>${x.barcode?`Strichcode ${esc(x.barcode)} · `:''}Im Vorrat</small></div><span class="qty-badge">${esc(fmtQty(x.quantity,x.unit))}</span><button class="mini-icon" data-remove-pantry="${x.id}">✕</button></div>`).join(''):`<div class="empty-state"><div class="big">🥫</div>Noch keine Vorräte eingetragen.<br><br>Tippe unten rechts auf ＋ und wähle manuelle Eingabe oder Strichcode-Scan.</div>`}<div class="stock-fab-wrap ${stockFabOpen?'open':''}" id="stockFabWrap"><div class="stock-fab-menu" aria-hidden="${stockFabOpen?'false':'true'}"><button class="stock-fab-action" data-action="scanBarcode"><span class="stock-fab-action-icon">▣</span><span><b>Strichcode scannen</b><small>Produkt mit der Kamera erfassen</small></span></button><button class="stock-fab-action" data-action="addPantry"><span class="stock-fab-action-icon">✎</span><span><b>Manuell eingeben</b><small>Produkt und Menge selbst eintragen</small></span></button></div><button class="fab stock-fab-toggle" data-stock-fab-toggle aria-expanded="${stockFabOpen?'true':'false'}" aria-label="Vorrat hinzufügen"><span>＋</span></button></div>`;
 }
 
 function settingsModal(){
@@ -506,6 +507,7 @@ function bind(){
   $$('[data-theme-choice]').forEach(b=>b.onclick=()=>{data.settings.theme=b.dataset.themeChoice;save(false);applyTheme();modal=settingsModal();render();});
   $$('[data-open-recipe]').forEach(card=>card.onclick=e=>{if(e.target.closest('button'))return;modal=recipeModal(recipeById(card.dataset.openRecipe));render();});
   $$('[data-action]').forEach(b=>b.onclick=e=>{e.stopPropagation();action(b.dataset.action,b.dataset.id,b.dataset.url);});
+  const stockFab=$('[data-stock-fab-toggle]');if(stockFab)stockFab.onclick=e=>{e.stopPropagation();stockFabOpen=!stockFabOpen;const wrap=$('#stockFabWrap');if(wrap){wrap.classList.toggle('open',stockFabOpen);stockFab.setAttribute('aria-expanded',String(stockFabOpen));wrap.querySelector('.stock-fab-menu')?.setAttribute('aria-hidden',String(!stockFabOpen));}};
   $$('[data-rate]').forEach(b=>b.onclick=()=>{const[id,n]=b.dataset.rate.split('|');const r=recipeById(id);r.rating=+n;learnFromRecipe(r,+n);save(false);modal=recipeModal(r);render();});
   $$('[data-place]').forEach(b=>b.onclick=()=>{const[d,m,id]=b.dataset.place.split('|');addToMeal(d,m,id);learnFromRecipe(recipeById(id),1);modal=null;save();flash('Zum Wochenplan hinzugefügt.');});
   $$('[data-pick]').forEach(b=>b.onclick=()=>{const[d,m,id]=b.dataset.pick.split('|');addToMeal(d,m,id);modal=null;save();});
@@ -539,8 +541,8 @@ function action(a,id,url){
   if(a==='autoPlan'){autoPlan();return;}
   if(a==='planToShopping'){plannerToShopping();return;}
   if(a==='addShopping'){modal=addItemModal('shopping');render();return;}
-  if(a==='addPantry'){modal=addItemModal('pantry');render();return;}
-  if(a==='scanBarcode'){modal=barcodeScannerModal();render();setTimeout(startBarcodeScanner,120);return;}
+  if(a==='addPantry'){stockFabOpen=false;modal=addItemModal('pantry');render();return;}
+  if(a==='scanBarcode'){stockFabOpen=false;modal=barcodeScannerModal();render();setTimeout(startBarcodeScanner,120);return;}
   if(a==='addRecipe'){modal=addRecipeModal();render();return;}
   if(a==='testWorker'){fetch(`${CHEF_PROXY}/health`).then(r=>r.json()).then(j=>flash(j.ok?'Worker verbunden.':'Worker antwortet unerwartet.')).catch(()=>flash('Worker nicht erreichbar.'));return;}
 }
@@ -551,8 +553,9 @@ function bindMealGestures(){
   const MOVE_TOLERANCE=20;
   const SWIPE_OPEN=42;
   const DELETE_WIDTH=88;
-  const EDGE_SCROLL=105;
-  const MAX_SCROLL_SPEED=14;
+  const SCROLL_DEAD_TOP=0.28;
+  const SCROLL_DEAD_BOTTOM=0.72;
+  const MAX_SCROLL_SPEED=28;
 
   $$('.meal-slot[data-slot]').forEach(slot=>{
     let sx=0,sy=0,dx=0,dy=0,pointerId=null;
@@ -585,12 +588,21 @@ function bindMealGestures(){
       scrollRaf=0;
       if(!dragging)return;
       const h=window.innerHeight;
+      const topEdge=h*SCROLL_DEAD_TOP;
+      const bottomEdge=h*SCROLL_DEAD_BOTTOM;
       let speed=0;
-      if(lastY<EDGE_SCROLL) speed=-MAX_SCROLL_SPEED*(1-lastY/EDGE_SCROLL);
-      else if(lastY>h-EDGE_SCROLL) speed=MAX_SCROLL_SPEED*(1-(h-lastY)/EDGE_SCROLL);
-      if(Math.abs(speed)>.2){
-        window.scrollBy(0,speed);
-        updateTarget(lastX,lastY);
+      if(lastY<topEdge){
+        const intensity=Math.min(1,(topEdge-lastY)/Math.max(1,topEdge));
+        speed=-MAX_SCROLL_SPEED*Math.pow(intensity,1.35);
+      }else if(lastY>bottomEdge){
+        const intensity=Math.min(1,(lastY-bottomEdge)/Math.max(1,h-bottomEdge));
+        speed=MAX_SCROLL_SPEED*Math.pow(intensity,1.35);
+      }
+      if(Math.abs(speed)>.35){
+        const scroller=document.scrollingElement||document.documentElement;
+        const before=scroller.scrollTop;
+        scroller.scrollTop+=speed;
+        if(scroller.scrollTop!==before) updateTarget(lastX,lastY);
         scrollRaf=requestAnimationFrame(autoScroll);
       }
     };

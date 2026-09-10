@@ -16,3 +16,10 @@ Neu in dieser Version:
 - Produktname und Packungsmenge werden – soweit verfügbar – automatisch vorgeschlagen und können vor dem Hinzufügen geändert werden.
 - Nicht gefundene Produkte können nach dem Scan manuell benannt werden.
 - Manuelle Eingabe einer Barcode-Nummer als Fallback.
+
+
+## Neu in Clean Rebuild v7
+- Drag & Drop scrollt jetzt wie ein Joystick: In der mittleren Bildschirmzone bleibt die Ansicht stehen.
+- Erst wenn das gegriffene Gericht deutlich nach oben oder unten bewegt wird, scrollt die Seite kontinuierlich in diese Richtung.
+- Je weiter der Finger Richtung Bildschirmrand wandert, desto schneller wird gescrollt.
+- Das bisherige `overflow:hidden` während des Ziehens wurde entfernt, damit iOS/PWA-Scrolling nicht blockiert wird.
