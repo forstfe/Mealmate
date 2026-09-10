@@ -1,28 +1,10 @@
-# MealMate – Clean Rebuild
+# MealMate Clean Rebuild v4
 
-Diese Version wurde technisch neu aufgebaut und ersetzt die bisherige Versionskette.
-
-## Enthalten
-- 4 Hauptbereiche: Start, Rezepte, Plan, Einkauf
-- Rezepte: „Meine Rezepte“ + „Erkunden“
-- Einkauf: „Einkaufsliste“ + „Vorrat“
-- Persönliche Chefkoch-Empfehlungen direkt auf Start
-- Empfehlungen lernen aus Favoriten, Bewertungen, gekochten und gespeicherten Rezepten
-- Chefkoch-Suche über den fest eingebauten Worker
-- Chefkoch-Rezepte speichern und direkt in den Wochenplan übernehmen
-- Originalrezept eingebettet in MealMate
-- Wochenplan für Frühstück, Mittagessen und Abendessen
-- Drag & Drop / iPhone-Pointer-Drag zwischen Plan-Slots
-- Wischgeste nach links zeigt erst „Löschen“; gelöscht wird erst nach Tipp
-- Vorratsabzug bei Einkaufsliste
-- Darkmode: Hell, Dunkel, Automatisch
-- Bestehende `mealmate_data`-Daten werden beim Start bestmöglich migriert
-
-## Wichtig zu Rezeptbildern
-Bilder werden bewusst **nicht zugeschnitten**. Es gibt kein `object-fit: cover` für Rezeptbilder. Sie werden proportional mit `height: auto` und `object-fit: contain` dargestellt, sodass das komplette Bild sichtbar bleibt.
-
-## Installation über GitHub Pages
-Den Inhalt dieses Ordners in das bestehende GitHub-Pages-Repository hochladen und die alten Dateien ersetzen. Anschließend die PWA auf dem iPhone vollständig schließen und neu öffnen.
-
-Fest eingebauter Worker:
-`https://mealmate.grxq8hqb8r.workers.dev`
+Neu in dieser Version:
+- Mehrere Gerichte pro Mahlzeit im Wochenplan.
+- Beim Long-Press-Drag erscheint bei bereits belegten Mahlzeiten ein zusätzliches Feld zum Hinzufügen.
+- Leere Mahlzeiten behalten das normale Auswahlfeld.
+- Beim Verschieben wird ein Gericht zur Ziel-Mahlzeit hinzugefügt, statt ein vorhandenes Gericht zu ersetzen.
+- Im +Plan-Dialog bleiben alle Mahlzeiten auswählbar; bereits belegte Mahlzeiten sind grün markiert und zeigen die Anzahl vorhandener Gerichte.
+- Wischen nach links und anschließendes Tippen auf „Löschen“ entfernt nur das jeweilige Gericht.
+- Bestehende Wochenpläne aus älteren MealMate-Versionen werden automatisch in das neue Mehrfach-Gerichte-Format migriert.
